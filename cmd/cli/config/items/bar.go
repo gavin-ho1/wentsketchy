@@ -77,7 +77,7 @@ func getMonitorName() string {
 func getPaddingForMonitor(name string) (left int, right int) {
 	switch {
 	case strings.Contains(name, "DP2HDMI"):
-		return 45, 45
+		return 5, 5
 	default:
 		return 5, 5
 	}
@@ -87,7 +87,7 @@ func getPaddingForMonitor(name string) (left int, right int) {
 func getYOffsetForMonitor(name string) int {
 	switch {
 	case strings.Contains(name, "DP2HDMI"):
-		return 25
+		return 0
 	default:
 		return 5
 	}
