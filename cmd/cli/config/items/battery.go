@@ -104,7 +104,7 @@ func (i BatteryItem) Update(
 		battery := batteries[0]
 
 		percentage := getBatteryPercentage(battery)
-		icon, color := getBatteryStatus(percentage)
+		icon, color := getBatteryStatus(percentage, battery.State)
 
 		batteryItem := sketchybar.ItemOptions{
 			Icon: sketchybar.ItemIconOptions{
@@ -128,7 +128,12 @@ func isBattery(name string) bool {
 	return name == batteryItemName
 }
 
-func getBatteryStatus(percentage float64) (string, string) {
+func getBatteryStatus(percentage float64, state battery.State) (string, string) {
+	// return state.String(), colors.Battery1
+	if state.String() == "Charging" || state.String() == "Idle" || state.String() == "Full" {
+		return icons.BatteryCharging, colors.Battery1
+	}
+
 	switch {
 	case percentage >= 80 && percentage <= 100:
 		return icons.Battery100, colors.Battery1
