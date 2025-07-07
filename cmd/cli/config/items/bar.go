@@ -31,7 +31,7 @@ func Bar(batches Batches) (Batches, error) {
 
 func ShowBar(batches Batches) (Batches, error) {
 	bar := sketchybar.BarOptions{
-		YOffset: pointer(0),
+		YOffset: pointer(3),
 	}
 
 	batches = batch(batches, m(s(

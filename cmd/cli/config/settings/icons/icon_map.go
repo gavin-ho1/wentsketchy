@@ -49,6 +49,7 @@ var App = map[string]string{
 	"ClickUp":                          ":click_up:",
 	"Code":                             ":code:",
 	"Code - Insiders":                  ":code:",
+	"Void":                             ":code:",
 	"Color Picker":                     ":color_picker:",
 	"数码测色计":                            ":color_picker:",
 	"CotEditor":                        ":coteditor:",

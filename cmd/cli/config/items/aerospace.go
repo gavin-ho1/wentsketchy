@@ -10,7 +10,7 @@ import (
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
-	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
+	colorsPkg "github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
 	"github.com/lucax88x/wentsketchy/internal/aerospace"
 	aerospace_events "github.com/lucax88x/wentsketchy/internal/aerospace/events"
@@ -127,6 +127,10 @@ func (item AerospaceItem) CheckTree(
 	var aggregatedErr error
 	for _, monitor := range tree.Monitors {
 		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+				continue // skip workspaces not defined in the icons.Workspace map
+			}
+			
 			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
 
 			for _, windowID := range workspace.Windows {
@@ -416,8 +420,8 @@ func (item AerospaceItem) getWindowVisibility(isFocusedWorkspace bool) *windowVi
 	if !isFocusedWorkspace {
 		width = pointer(0)
 		show = "off"
-		color = colors.Transparent
-		focusedColor = colors.Transparent
+		color = colorsPkg.Transparent
+		focusedColor = colorsPkg.Transparent
 	}
 
 	return &windowVisibility{
@@ -438,6 +442,10 @@ func (item AerospaceItem) handleWorkspaceChange(
 
 	for _, monitor := range tree.Monitors {
 		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+				continue
+			}
+			
 			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
 
 			sketchybarWorkspaceID := getSketchybarWorkspaceID(workspace.Workspace)
@@ -535,6 +543,10 @@ func (item AerospaceItem) handleDisplayChange(batches Batches) Batches {
 
 	for _, monitor := range tree.Monitors {
 		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+				continue
+			}
+			
 			sketchybarWorkspaceID := getSketchybarWorkspaceID(workspace.Workspace)
 
 			workspaceItem := &sketchybar.ItemOptions{
@@ -560,17 +572,19 @@ func (item AerospaceItem) handleDisplayChange(batches Batches) Batches {
 
 func (item *AerospaceItem) addWorkspaceBracket(
 	batches Batches,
+	isFocusedWorkspace bool,
 	workspaceID string,
 	sketchybarWindowIDs []string,
 ) Batches {
+	colors := item.getWorkspaceColors(isFocusedWorkspace)
 	workspaceBracketItem := sketchybar.BracketOptions{
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "on",
 			Border: sketchybar.BorderOptions{
-				Color: settings.Sketchybar.Aerospace.WorkspaceBackgroundColor,
+				Color: colors.backgroundColor,
 			},
 			Color: sketchybar.ColorOptions{
-				Color: colors.Transparent,
+				Color: colorsPkg.Transparent,
 			},
 		},
 	}
@@ -653,6 +667,10 @@ func (item *AerospaceItem) applyTree(
 		item.logger.DebugContext(ctx, "monitor", slog.Int("monitor", monitor.Monitor))
 
 		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+				continue
+			}
+			
 			isFocusedWorkspace := focusedSpaceID == workspace.Workspace
 
 			item.logger.DebugContext(
@@ -702,7 +720,7 @@ func (item *AerospaceItem) applyTree(
 				sketchybarWindowIDs[i] = sketchybarWindowID
 			}
 
-			batches = item.addWorkspaceBracket(batches, workspace.Workspace, sketchybarWindowIDs)
+			batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
 			batches = item.addWorkspaceSpacer(batches, workspace.Workspace, position)
 		}
 	}

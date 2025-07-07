@@ -24,11 +24,11 @@ type WentsketchyItem interface {
 type IndexedWentsketchyItems = map[string]WentsketchyItem
 
 type WentsketchyItems struct {
-	MainIcon  MainIconItem
-	Calendar  CalendarItem
-	FrontApp  FrontAppItem
-	Aerospace AerospaceItem
-	Battery   BatteryItem
-	CPU       CPUItem
-	Sensors   SensorsItem
+	MainIcon    MainIconItem
+	Calendar    CalendarItem
+	FrontApp    FrontAppItem
+	Aerospace   AerospaceItem
+	Battery     BatteryItem
+	CPU         CPUItem
+	Sensors     SensorsItem
 }

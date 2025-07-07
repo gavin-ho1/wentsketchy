@@ -7,9 +7,9 @@ type Clock interface {
 }
 
 const Date = "2006-01-02"
-const DateTime = "2006-01-02 15:04:05"
-const Time = "15:04:05"
-const HoursMinutes = "15:04"
+const DateTime = "2006-01-02 03:04:05 PM"
+const Time = "03:04:05 PM"
+const HoursMinutes = "3:04 PM"
 
 type SystemCock struct{}
 

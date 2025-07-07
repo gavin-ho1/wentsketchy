@@ -19,16 +19,21 @@ const (
 	Battery25       = "􀛩"
 	Battery0        = "􀛪"
 	BatteryCharging = "􀢋"
+	LibreWolf       = "􀁟"
+	Music           = ""
+	Wifi            = ""
+	Bluetooth       = ""
+	None            = ""
 )
 
 //nolint:gochecknoglobals // ok
 var Workspace = map[string]string{
-	"1": Chat,
+	"1": Email,
 	"2": Code,
-	"3": Terminal,
-	"4": Chrome,
-	"5": Finder,
-	"6": Email,
-	"7": Tools,
-	"8": Documents,
+	"3": Chat,
+	"4": Music,
+	// "5": Finder,
+	// "6": CPU,
+	// "7": Tools,
+	// "8": Documents,
 }

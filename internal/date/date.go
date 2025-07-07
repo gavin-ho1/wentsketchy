@@ -3,7 +3,7 @@ package date
 import "time"
 
 const Date = "2006-01-02"
-const DateTime = "2006-01-02 15:04:05"
+const DateTime = "2006-01-02 3:04:05 PM"
 
 func StartOfMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())

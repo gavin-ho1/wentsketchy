@@ -40,9 +40,9 @@ func (i CalendarItem) Init(
 			Right: settings.Sketchybar.ItemSpacing,
 		},
 		Icon: sketchybar.ItemIconOptions{
-			Value: icons.Clock,
+			Value: icons.None,
 			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
+				Left:  pointer(*settings.Sketchybar.IconPadding / 2),
 				Right: pointer(*settings.Sketchybar.IconPadding / 2),
 			},
 		},
