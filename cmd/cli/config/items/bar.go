@@ -1,19 +1,26 @@
 package items
 
 import (
+	"bytes"
+	"os/exec"
+	"strings"
+
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
 )
 
 func Bar(batches Batches) (Batches, error) {
+	monitor := getMonitorName()
+	left, right := getPaddingForMonitor(monitor)
+
 	bar := sketchybar.BarOptions{
 		Position: "top",
 		Height:   settings.Sketchybar.BarHeight,
 		Margin:   settings.Sketchybar.BarMargin,
 		YOffset:  pointer(-40),
 		Padding: sketchybar.PaddingOptions{
-			Right: pointer(8),
-			Left:  pointer(8),
+			Right: pointer(right),
+			Left:  pointer(left),
 		},
 		Topmost:       "off",
 		Sticky:        "on",
@@ -42,4 +49,35 @@ func ShowBar(batches Batches) (Batches, error) {
 	), bar.ToArgs()))
 
 	return batches, nil
+}
+
+// getMonitorName returns the name of the first monitor found via `aerospace list-monitors`.
+func getMonitorName() string {
+	cmd := exec.Command("aerospace", "list-monitors")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return "default"
+	}
+
+	lines := strings.Split(out.String(), "\n")
+	for _, line := range lines {
+		parts := strings.Split(line, "|")
+		if len(parts) >= 2 {
+			monitorName := strings.TrimSpace(parts[1])
+			return monitorName
+		}
+	}
+	return "default"
+}
+
+// getPaddingForMonitor maps monitor names to specific padding.
+func getPaddingForMonitor(name string) (left int, right int) {
+	switch {
+	case strings.Contains(name, "DP2HDMI"):
+		return 40, 40
+	default:
+		return 8, 8
+	}
 }
