@@ -17,7 +17,6 @@ func Bar(batches Batches) (Batches, error) {
 		Position: "top",
 		Height:   settings.Sketchybar.BarHeight,
 		Margin:   settings.Sketchybar.BarMargin,
-		YOffset:  pointer(-40),
 		Padding: sketchybar.PaddingOptions{
 			Right: pointer(right),
 			Left:  pointer(left),
@@ -32,13 +31,15 @@ func Bar(batches Batches) (Batches, error) {
 	}
 
 	batches = batch(batches, m(s("--bar"), bar.ToArgs()))
-
 	return batches, nil
 }
 
 func ShowBar(batches Batches) (Batches, error) {
+	monitor := getMonitorName()
+	yOffset := getYOffsetForMonitor(monitor)
+
 	bar := sketchybar.BarOptions{
-		YOffset: pointer(3),
+		YOffset: pointer(yOffset),
 	}
 
 	batches = batch(batches, m(s(
@@ -79,5 +80,15 @@ func getPaddingForMonitor(name string) (left int, right int) {
 		return 40, 40
 	default:
 		return 8, 8
+	}
+}
+
+// getYOffsetForMonitor maps monitor names to specific y-offsets.
+func getYOffsetForMonitor(name string) int {
+	switch {
+	case strings.Contains(name, "DP2HDMI"):
+		return 25
+	default:
+		return 0
 	}
 }
