@@ -58,15 +58,16 @@ func (i BatteryItem) Init(
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(120),
+		UpdateFreq: pointer(120), // This is for routine updates every 120 seconds
 		Updates:    "on",
 		Script:     updateEvent,
 	}
 
 	batches = batch(batches, s("--add", "item", batteryItemName, position))
 	batches = batch(batches, m(s("--set", batteryItemName), batteryItem.ToArgs()))
+	// Subscribe to events that should trigger an immediate update
 	batches = batch(batches, s("--subscribe", batteryItemName,
-		events.PowerSourceChanged,
+		events.PowerSourceChanged, // This is crucial for detecting plug/unplug
 		events.SystemWoke,
 	))
 
@@ -83,7 +84,9 @@ func (i BatteryItem) Update(
 		return batches, nil
 	}
 
-	if args.Event == events.Routine || args.Event == events.Forced {
+	// Trigger an update if it's a routine update, a forced update,
+	// or if the power source changed (plugged in/unplugged).
+	if args.Event == events.Routine || args.Event == events.Forced || args.Event == events.PowerSourceChanged {
 		batteries, err := battery.GetAll()
 
 		if err != nil {
@@ -129,11 +132,14 @@ func isBattery(name string) bool {
 }
 
 func getBatteryStatus(percentage float64, state battery.State) (string, string) {
-	// return state.String(), colors.Battery1
+	// If the battery is actively charging, or is idle (plugged in and maintaining charge),
+	// or is full (implies plugged in and at 100%).
+	// This covers scenarios where the battery is connected to power.
 	if state.String() == "Charging" || state.String() == "Idle" || state.String() == "Full" {
-		return icons.BatteryCharging, colors.Battery1
+		return icons.BatteryCharging, colors.Battery1 // Show charging icon
 	}
 
+	// If not in a "plugged-in" state, determine icon based on percentage (discharging)
 	switch {
 	case percentage >= 80 && percentage <= 100:
 		return icons.Battery100, colors.Battery1
@@ -146,7 +152,8 @@ func getBatteryStatus(percentage float64, state battery.State) (string, string) 
 	case percentage >= 0 && percentage < 10:
 		return icons.Battery0, colors.Battery5
 	default:
-		return "", "" // Handle invalid percentages
+		// Fallback for unexpected percentages, though ideally percentages should be within 0-100
+		return "", ""
 	}
 }
 
@@ -154,4 +161,17 @@ func getBatteryPercentage(battery *battery.Battery) float64 {
 	return (battery.Current / battery.Full) * 100
 }
 
+// Ensure BatteryItem implements WentsketchyItem interface
 var _ WentsketchyItem = (*BatteryItem)(nil)
+
+// Note: `pointer`, `s`, `m`, `batch`, and `Batches` types are assumed
+// to be defined elsewhere in your `items` package or imported from `sketchybar`.
+// These are not part of the `BatteryItem` struct itself but are helper functions
+// used in its `Init` and `Update` methods.
+//
+// For example, if `pointer` is a simple helper:
+/*
+func pointer[T any](val T) *T {
+    return &val
+}
+*/
