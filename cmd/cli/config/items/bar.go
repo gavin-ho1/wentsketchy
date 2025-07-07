@@ -88,6 +88,8 @@ func getYOffsetForMonitor(name string) int {
 	switch {
 	case strings.Contains(name, "DP2HDMI"):
 		return 0
+	case strings.Contains(name, "LG HDR 4K"):
+		return 0
 	default:
 		return 5
 	}
