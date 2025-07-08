@@ -31,4 +31,5 @@ type WentsketchyItems struct {
 	Battery     BatteryItem
 	CPU         CPUItem
 	Sensors     SensorsItem
+	Volume      VolumeItem
 }

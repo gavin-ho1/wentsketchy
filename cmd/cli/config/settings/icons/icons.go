@@ -5,6 +5,12 @@ const (
 	Clock           = ""
 	Chat            = "󱅱"
 	Terminal        = ""
+
+	Volume100       = "􀊩"
+	Volume60        = "􀊧"
+	Volume30        = "􀊥"
+	VolumeMute      = "􀊣"
+
 	Code            = ""
 	Chrome          = ""
 	Finder          = ""

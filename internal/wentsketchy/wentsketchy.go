@@ -69,6 +69,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 	battery := items.NewBatteryItem(di.Logger)
 	cpu := items.NewCPUItem(di.Logger, di.command)
 	sensors := items.NewSensorsItem(di.Logger, di.command)
+	volume := items.NewVolumeItem(di.Logger, di.command)
 
 	di.Config = config.NewConfig(
 		cfg,
@@ -82,6 +83,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			"battery":   battery,
 			"cpu":       cpu,
 			"sensors":   sensors,
+			"volume":    volume,
 		},
 		items.WentsketchyItems{
 			MainIcon:  mainIcon,
@@ -91,6 +93,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			Battery:   battery,
 			CPU:       cpu,
 			Sensors:   sensors,
+			Volume:    volume,
 		},
 	)
 
