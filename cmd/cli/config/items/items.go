@@ -32,4 +32,5 @@ type WentsketchyItems struct {
 	CPU         CPUItem
 	Sensors     SensorsItem
 	Volume      VolumeItem
+	Bluetooth   BluetoothItem
 }
