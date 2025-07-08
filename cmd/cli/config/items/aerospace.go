@@ -438,6 +438,7 @@ func (item AerospaceItem) handleWorkspaceChange(
 	_ string,
 	focusedWorkspaceID string,
 ) Batches {
+	item.aerospace.SingleFlightRefreshTree()
 	tree := item.aerospace.GetTree()
 
 	for _, monitor := range tree.Monitors {
