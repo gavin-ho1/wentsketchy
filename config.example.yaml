@@ -4,8 +4,8 @@ left:
   - front_app
 
 right:
-  - wifi
   - bluetooth
+  - wifi
   - volume
   - battery
   - calendar
