@@ -49,7 +49,7 @@ func (i BluetoothItem) Init(
 				Font: settings.FontIcon,
 			},
 			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
+				Left:  settings.Sketchybar.ItemSpacing,
 				Right: pointer(*settings.Sketchybar.IconPadding / 2),
 			},
 		},
@@ -59,9 +59,10 @@ func (i BluetoothItem) Init(
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(120),
-		Updates:    "on",
-		Script:     updateEvent,
+		UpdateFreq:   pointer(120),
+		Updates:      "on",
+		Script:       updateEvent,
+		ClickScript: "blueutil -p toggle && sketchybar --trigger bluetooth_change",
 	}
 
 	batches = batch(batches, s("--add", "item", bluetoothItemName, position))
@@ -92,10 +93,10 @@ func (i BluetoothItem) Update(
 		var label, color string
 
 		if trimmedOutput == "1" {
-			label = "Bluetooth On"
+			label = "On"
 			color = colors.Blue
 		} else {
-			label = "Bluetooth Off"
+			label = "Off"
 			color = colors.White
 		}
 
