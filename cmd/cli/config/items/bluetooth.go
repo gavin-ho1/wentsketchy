@@ -49,7 +49,7 @@ func (i BluetoothItem) Init(
 				Font: settings.FontIcon,
 			},
 			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.ItemSpacing,
+				Left:  settings.Sketchybar.IconPadding,
 				Right: pointer(*settings.Sketchybar.IconPadding / 2),
 			},
 		},

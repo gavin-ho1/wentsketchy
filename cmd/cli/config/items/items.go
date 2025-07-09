@@ -33,4 +33,5 @@ type WentsketchyItems struct {
 	Sensors     SensorsItem
 	Volume      VolumeItem
 	Bluetooth   BluetoothItem
+	Wifi        WifiItem
 }

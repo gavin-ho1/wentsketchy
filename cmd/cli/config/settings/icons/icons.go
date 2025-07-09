@@ -28,6 +28,7 @@ const (
 	LibreWolf       = "􀁟"
 	Music           = ""
 	Wifi            = ""
+	WifiOff         = "󰤮"
 	Bluetooth       = ""
 	None            = ""
 )

@@ -7,10 +7,10 @@ import (
 
 //nolint:gochecknoglobals //ok
 var envKeys = []string{
+	"HOME",
 	"PWD",
 	"ALLUSERSAPPDATA",
 	"APPDATA",
-	"HOME",
 }
 
 func Get() (string, error) {

@@ -71,6 +71,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 	sensors := items.NewSensorsItem(di.Logger, di.command)
 	volume := items.NewVolumeItem(di.Logger, di.command)
 	bluetooth := items.NewBluetoothItem(di.Logger, di.command)
+	wifi := items.NewWifiItem(di.Logger, di.command)
 
 	di.Config = config.NewConfig(
 		cfg,
@@ -86,6 +87,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			"sensors":   sensors,
 			"volume":    volume,
 			"bluetooth": bluetooth,
+			"wifi":      wifi,
 		},
 		items.WentsketchyItems{
 			MainIcon:  mainIcon,
@@ -97,6 +99,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			Sensors:   sensors,
 			Volume:    volume,
 			Bluetooth: bluetooth,
+			Wifi:      wifi,
 		},
 	)
 
@@ -110,6 +113,8 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 
 	bluetoothJob := items.NewBluetoothJob(di.Logger, di.command, di.Sketchybar)
 	bluetoothJob.Start(ctx)
+	wifiJob := items.NewWifiJob(di.Logger, di.command, di.Sketchybar)
+	wifiJob.Start(ctx)
 
 	return nil
 }
