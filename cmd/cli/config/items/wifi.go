@@ -130,7 +130,7 @@ func (i WifiItem) Update(
 				if ssid != "" {
 					// SSID successfully retrieved
 					label = ssid
-					color = colors.Blue // Connected color
+					color = colors.Green // Connected color
 				} else {
 					// No SSID found in system_profiler output (e.g., not connected to any network)
 					i.logger.Debug("not connected to a network, or SSID not found in system_profiler output", "output", ssidOutput)
