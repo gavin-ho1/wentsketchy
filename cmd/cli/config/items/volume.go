@@ -63,7 +63,9 @@ func (i VolumeItem) Init(
 		UpdateFreq: pointer(120),
 		Updates:    "on",
 		Script:     updateEvent,
+		ClickScript: `osascript -e 'set volume output muted not (output muted of (get volume settings))' && sketchybar --trigger volume_change`,
 	}
+	
 
 	batches = batch(batches, s("--add", "item", volumeItemName, position))
 	batches = batch(batches, m(s("--set", volumeItemName), volumeItem.ToArgs()))
