@@ -89,10 +89,10 @@ func (i WifiItem) Update(
 		powerOutput, err := i.command.Run(ctx, "networksetup", "-getairportpower", "en0")
 		if err != nil || !strings.Contains(powerOutput, ": On") {
 			label = "Off"
-			color = colors.White
+			color = colors.Red
 			icon = icons.WifiOff
 		} else {
-			color = colors.Blue
+			color = colors.Green
 			ssidOutput, err := i.command.Run(ctx, "networksetup", "-getairportnetwork", "en0")
 			if err != nil || strings.Contains(ssidOutput, "You are not associated with an AirPort network.") {
 				label = "On"
