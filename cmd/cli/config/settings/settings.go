@@ -44,7 +44,7 @@ var Sketchybar = Settings{
 	BarMargin:           pointer(0),
 	BarTransitionTime:   "60",
 	ItemHeight:          pointer(25),
-	ItemSpacing:         pointer(5),
+	ItemSpacing:         pointer(2),
 	ItemRadius:          pointer(45),
 	IconPadding:         pointer(12),
 	ItemBackgroundColor: colors.Transparent,

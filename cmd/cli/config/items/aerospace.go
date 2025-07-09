@@ -615,7 +615,7 @@ func (item *AerospaceItem) addWorkspaceSpacer(
 	position sketchybar.Position,
 ) Batches {
 	workspaceSpacerItem := sketchybar.ItemOptions{
-		Width: settings.Sketchybar.ItemSpacing,
+		Width: pointer(*settings.Sketchybar.ItemSpacing * 2),
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "off",
 		},
@@ -645,7 +645,7 @@ func (item *AerospaceItem) applyTree(
 	focusedSpaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
 
 	aerospaceSpacerItem := sketchybar.ItemOptions{
-		Width: settings.Sketchybar.ItemSpacing,
+		Width: pointer(*settings.Sketchybar.ItemSpacing * 2),
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "off",
 		},
@@ -667,11 +667,14 @@ func (item *AerospaceItem) applyTree(
 	for _, monitor := range tree.Monitors {
 		item.logger.DebugContext(ctx, "monitor", slog.Int("monitor", monitor.Monitor))
 
+		visibleWorkspaces := []*aerospace.WorkspaceWithWindowIDs{}
 		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
+			if _, ok := icons.Workspace[workspace.Workspace]; ok {
+				visibleWorkspaces = append(visibleWorkspaces, workspace)
 			}
-			
+		}
+
+		for i, workspace := range visibleWorkspaces {
 			isFocusedWorkspace := focusedSpaceID == workspace.Workspace
 
 			item.logger.DebugContext(
@@ -722,7 +725,9 @@ func (item *AerospaceItem) applyTree(
 			}
 
 			batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
-			batches = item.addWorkspaceSpacer(batches, workspace.Workspace, position)
+			if i < len(visibleWorkspaces)-1 {
+				batches = item.addWorkspaceSpacer(batches, workspace.Workspace, position)
+			}
 		}
 	}
 
