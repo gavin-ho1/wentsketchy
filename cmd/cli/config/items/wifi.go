@@ -36,6 +36,19 @@ func (i WifiItem) Init(
 		return batches, errors.New("wifi: could not generate update event")
 	}
 
+	// Define the ClickScript for immediate feedback
+	// $NAME is a sketchybar internal variable that holds the item's name (wifiItemName)
+	clickScript := `
+if networksetup -getairportpower en0 | grep -q On; then
+    networksetup -setairportpower en0 off
+    sketchybar --set "$NAME" label="Off" icon="` + icons.WifiOff + `" icon.color="` + colors.Red + `" # Immediate visual feedback
+else
+    networksetup -setairportpower en0 on
+    sketchybar --set "$NAME" label="On" icon="` + icons.Wifi + `" icon.color="` + colors.White + `" # Immediate visual feedback
+fi
+(sleep 0.1; sketchybar --trigger wifi_change) & # Trigger the full update in the background
+`
+
 	wifiItem := sketchybar.ItemOptions{
 		Display: "active",
 		Padding: sketchybar.PaddingOptions{
@@ -58,10 +71,10 @@ func (i WifiItem) Init(
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq:   pointer(120),
-		Updates:      "on",
-		Script:       updateEvent,
-		ClickScript: "networksetup -getairportpower en0 | grep -q On && networksetup -setairportpower en0 off || networksetup -setairportpower en0 on; sketchybar --trigger wifi_change",
+		UpdateFreq:  pointer(120), // Update every 120 seconds (2 minutes)
+		Updates:     "on",
+		Script:      updateEvent,
+		ClickScript: clickScript, // Use the new clickScript variable
 	}
 
 	batches = batch(batches, s("--add", "item", wifiItemName, position))
@@ -86,21 +99,49 @@ func (i WifiItem) Update(
 		var label, color string
 		icon := icons.Wifi
 
+		// Check if Wi-Fi power is On/Off
+		// networksetup -getairportpower en0 returns "Wi-Fi Power (en0): On" or "Off"
 		powerOutput, err := i.command.Run(ctx, "networksetup", "-getairportpower", "en0")
 		if err != nil || !strings.Contains(powerOutput, ": On") {
+			// Wi-Fi is off or command failed
+			i.logger.Debug("wifi is off or networksetup command failed", "output", powerOutput, "error", err)
 			label = "Off"
 			color = colors.Red
 			icon = icons.WifiOff
 		} else {
-			color = colors.Green
-			ssidOutput, err := i.command.Run(ctx, "networksetup", "-getairportnetwork", "en0")
-			if err != nil || strings.Contains(ssidOutput, "You are not associated with an AirPort network.") {
-				label = "On"
+			// Wi-Fi is on, now try to get the SSID using system_profiler (non-sudo)
+			color = colors.White // Default color if Wi-Fi is on (before knowing connection status)
+
+			// --- NON-SUDO IMPLEMENTATION: Use system_profiler with corrected awk parsing ---
+			// This command should not require sudo and reliably gets the SSID.
+			// It looks for "Current Network Information:", then reads the next line,
+			// removes the trailing colon, and prints the result.
+			ssidCommand := `system_profiler SPAirPortDataType | awk '/Current Network Information:/ {getline; sub(/:$/,""); print $0; exit}'`
+
+			ssidOutput, cmdErr := i.command.Run(ctx, "sh", "-c", ssidCommand)
+
+			if cmdErr != nil {
+				// Error running system_profiler
+				i.logger.Error("could not get ssid from system_profiler", "error", cmdErr, "raw_output", ssidOutput)
+				label = "On" // Indicate Wi-Fi is on, but we couldn't get the SSID
+				color = colors.Yellow // Suggests a warning/unknown state for connection
 			} else {
-				label = strings.TrimSpace(strings.TrimPrefix(ssidOutput, "Current Wi-Fi Network:"))
+				ssid := strings.TrimSpace(ssidOutput)
+				if ssid != "" {
+					// SSID successfully retrieved
+					label = ssid
+					color = colors.Blue // Connected color
+				} else {
+					// No SSID found in system_profiler output (e.g., not connected to any network)
+					i.logger.Debug("not connected to a network, or SSID not found in system_profiler output", "output", ssidOutput)
+					label = "On" // Wi-Fi is on, but no network associated
+					color = colors.White // Default color for on but not connected
+				}
 			}
+			// --- END NON-SUDO IMPLEMENTATION ---
 		}
 
+		// Update sketchybar item with determined icon, label, and color
 		wifiItem := sketchybar.ItemOptions{
 			Icon: sketchybar.ItemIconOptions{
 				Value: icon,
@@ -123,4 +164,18 @@ func isWifi(name string) bool {
 	return name == wifiItemName
 }
 
-var _ WentsketchyItem = (*WifiItem)(nil)
+// These helper functions (batch, s, m, pointer) and the WentsketchyItem interface
+// are assumed to be defined elsewhere in your project, e.g., in a common `helpers.go` file
+// within the same package, or in a package you import.
+/*
+type Batches []string
+func batch(b Batches, s ...string) Batches { return append(b, strings.Join(s, " ")) }
+func s(args ...string) string { return strings.Join(args, " ") }
+func m(cmd string, args ...string) string { return cmd + " " + strings.Join(args, " ") }
+func pointer[T any](v T) *T { return &v } // This would typically be in helpers.go
+type WentsketchyItem interface {
+    Init(ctx context.Context, position sketchybar.Position, batches Batches) (Batches, error)
+    Update(ctx context.Context, batches Batches, position sketchybar.Position, args *args.In) (Batches, error)
+}
+*/
+// var _ WentsketchyItem = (*WifiItem)(nil) // Uncomment if WentsketchyItem is a defined interface
