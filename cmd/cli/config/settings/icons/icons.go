@@ -3,7 +3,7 @@ package icons
 const (
 	Apple           = ""
 	Clock           = ""
-	Chat            = "󱅱"
+	Chat            = "􀌤"
 	Terminal        = ""
 
 	// Filled in Icons
@@ -17,14 +17,14 @@ const (
 	// Volume60        = "􀊦"
 	// Volume30        = "􀊤"
 	// VolumeMute      = "􀊢"
-	Code            = ""
+	Code            = "􀩼"
 	Chrome          = ""
 	Finder          = ""
 	Email           = "󰇰"
 	Tools           = ""
 	CPU             = "􀫥"
 	ThermoMedium    = "􀇬"
-	Documents       = "󰧮"
+	Documents       = "􀉁"
 	Battery100      = "􀛨"
 	Battery75       = "􀺸"
 	Battery50       = "􀺶"
@@ -36,12 +36,14 @@ const (
 	Wifi            = ""
 	WifiOff         = "􀙈"
 	Bluetooth       = ""
+	Book            = "􀤞"
+	Power           = "􀷄"
 	None            = ""
 )
 
 //nolint:gochecknoglobals // ok
 var Workspace = map[string]string{
-	"1": Email,
+	"1": Documents,
 	"2": Code,
 	"3": Chat,
 	"4": Music,
