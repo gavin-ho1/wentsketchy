@@ -6,11 +6,17 @@ const (
 	Chat            = "󱅱"
 	Terminal        = ""
 
+	// Filled in Icons
 	Volume100       = "􀊩"
 	Volume60        = "􀊧"
 	Volume30        = "􀊥"
 	VolumeMute      = "􀊣"
 
+	// Not filled in Icons
+	// Volume100       = "􀊨"
+	// Volume60        = "􀊦"
+	// Volume30        = "􀊤"
+	// VolumeMute      = "􀊢"
 	Code            = ""
 	Chrome          = ""
 	Finder          = ""
