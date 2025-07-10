@@ -51,7 +51,7 @@ var Sketchybar = Settings{
 	ItemBorderColor:     colors.White,
 	LabelColor:          colors.White,
 	LabelFont:           FontLabel,
-	LabelFontKind:       "Semibold",
+	LabelFontKind:       "Medium",
 	LabelFontSize:       "14.0",
 	IconColor:           colors.White,
 	IconFont:            FontIcon,
