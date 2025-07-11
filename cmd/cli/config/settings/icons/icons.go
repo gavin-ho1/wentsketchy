@@ -43,7 +43,7 @@ const (
 
 //nolint:gochecknoglobals // ok
 var Workspace = map[string]string{
-	"1": Documents,
+	"1": Email,
 	"2": Code,
 	"3": Chat,
 	"4": Music,
