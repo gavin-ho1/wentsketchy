@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -115,6 +116,41 @@ func (item AerospaceItem) Update(
 	return batches, err
 }
 
+func (item *AerospaceItem) updateWorkspaceBracket(
+	batches Batches,
+	workspaceID aerospace.WorkspaceID,
+) Batches {
+	tree := item.aerospace.GetTree()
+
+	// Find the workspace in the tree
+	var workspace *aerospace.WorkspaceWithWindowIDs
+	for _, monitor := range tree.Monitors {
+		for _, ws := range monitor.Workspaces {
+			if ws.Workspace == workspaceID {
+				workspace = ws
+				break
+			}
+		}
+	}
+
+	if workspace == nil {
+		// Workspace not found? Maybe it was removed.
+		return batches
+	}
+
+	// Build the list of member items for the bracket: the workspace item and all its window items.
+	members := []string{getSketchybarWorkspaceID(workspaceID)}
+	for _, windowID := range workspace.Windows {
+		members = append(members, getSketchybarWindowID(windowID))
+	}
+
+	// Update the bracket to set the new members.
+	bracketID := getSketchybarBracketID(workspaceID)
+	batches = batch(batches, s("--set", bracketID, "members:="+strings.Join(members, " ")))
+
+	return batches
+}
+
 func (item AerospaceItem) CheckTree(
 	ctx context.Context,
 	batches Batches,
@@ -154,6 +190,10 @@ func (item AerospaceItem) CheckTree(
 							"after",
 							getSketchybarWorkspaceID(workspace.Workspace),
 						))
+
+						// Update brackets for both old and new workspaces
+						batches = item.updateWorkspaceBracket(batches, currentWorkspaceID)
+						batches = item.updateWorkspaceBracket(batches, workspace.Workspace)
 					}
 				} else {
 					var sketchybarWindowID string
@@ -182,6 +222,9 @@ func (item AerospaceItem) CheckTree(
 						"after",
 						getSketchybarWorkspaceID(workspace.Workspace),
 					))
+
+					// Update bracket for the workspace that got a new window
+					batches = item.updateWorkspaceBracket(batches, workspace.Workspace)
 				}
 			}
 		}
@@ -324,10 +367,12 @@ func getSketchybarSpacerID(spaceID aerospace.WorkspaceID) string {
 }
 
 func (item *AerospaceItem) removeWindow(batches Batches, windowID aerospace.WindowID) Batches {
-	delete(item.windowIDs, windowID)
-
-	batches = batch(batches, s("--remove", getSketchybarWindowID(windowID)))
-
+	oldWorkspaceID, found := item.windowIDs[windowID]
+	if found {
+		delete(item.windowIDs, windowID)
+		batches = batch(batches, s("--remove", getSketchybarWindowID(windowID)))
+		batches = item.updateWorkspaceBracket(batches, oldWorkspaceID)
+	}
 	return batches
 }
 
