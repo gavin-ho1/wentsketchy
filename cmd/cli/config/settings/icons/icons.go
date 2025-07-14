@@ -21,6 +21,7 @@ const (
 	Chrome          = ""
 	Finder          = ""
 	Email           = "󰇰"
+	Video           = "􀍉"
 	Tools           = ""
 	CPU             = "􀫥"
 	ThermoMedium    = "􀇬"
@@ -47,7 +48,7 @@ var Workspace = map[string]string{
 	"2": Code,
 	"3": Chat,
 	"4": Music,
-	// "5": Finder,
+	"5": Video,
 	// "6": CPU,
 	// "7": Tools,
 	// "8": Documents,
