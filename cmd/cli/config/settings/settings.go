@@ -48,7 +48,7 @@ var Sketchybar = Settings{
 	ItemRadius:          pointer(45),
 	IconPadding:         pointer(12),
 	ItemBackgroundColor: colors.Transparent,
-	ItemBorderColor:     colors.White,
+	ItemBorderColor:     colors.WhiteA40,
 	LabelColor:          colors.White,
 	LabelFont:           FontLabel,
 	LabelFontKind:       "Medium",
@@ -61,12 +61,12 @@ var Sketchybar = Settings{
 	Aerospace: AerospaceSettings{
 		Padding:                         pointer(8),
 		WorkspaceBackgroundColor:        colors.Transparent,
-		WorkspaceColor:                  colors.White,
+		WorkspaceColor:                  colors.WhiteA40,
 		WorkspaceFocusedBackgroundColor: colors.White,
 		WorkspaceFocusedColor:           colors.Black1,
 		WindowColor:                     colors.WhiteA40,
 		WindowFocusedColor:              colors.White,
-		TransitionTime:                  "7",
+		TransitionTime:                  "5",
 	},
 }
 
