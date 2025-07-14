@@ -79,7 +79,7 @@ func getPaddingForMonitor(name string) (left int, right int) {
 	case strings.Contains(name, "DP2HDMI"):
 		return 5, 5
 	default:
-		return 10, 10
+		return 8, 8
 	}
 }
 
