@@ -90,18 +90,21 @@ func (i BluetoothItem) Update(
 		}
 
 		trimmedOutput := strings.TrimSpace(output)
-		var label, color string
+		var label, color, icon string
 
 		if trimmedOutput == "1" {
 			label = "On"
 			color = colors.Blue
+			icon = icons.Bluetooth
 		} else {
 			label = "Off"
 			color = colors.White
+			icon = icons.BluetoothOff
 		}
 
 		bluetoothItem := sketchybar.ItemOptions{
 			Icon: sketchybar.ItemIconOptions{
+				Value: icon,
 				Color: sketchybar.ColorOptions{
 					Color: color,
 				},
