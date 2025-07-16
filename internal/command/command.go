@@ -28,13 +28,15 @@ func (c Command) Run(ctx context.Context, name string, arg ...string) (string, e
 
 	cmd := exec.Command(name, arg...)
 
+	c.logger.DebugContext(ctx, "command: env", slog.Any("env", cmd.Env))
+
 	// fmt.Println(fmt.Sprintf("%s %v", cmd.Path, cmd.Args))
 
 	out, err := cmd.Output()
 
 	if err != nil {
 		//nolint:errorlint // no wrap
-		return "", fmt.Errorf("could not run command '%s'. %v", fmt.Sprintf("%s %v", cmd.Path, cmd.Args), err)
+		return "", fmt.Errorf("could not run command '%s'. %v", name, err)
 	}
 
 	return string(out), nil

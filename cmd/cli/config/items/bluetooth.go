@@ -3,9 +3,9 @@ package items
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -83,23 +83,29 @@ func (i BluetoothItem) Update(
 		return batches, nil
 	}
 
-		if args.Event == events.Routine || args.Event == events.Forced || args.Event == events.SystemWoke || args.Event == "bluetooth_change" {
-		output, err := i.command.Run(ctx, "blueutil", "-p")
-		if err != nil {
-			return batches, fmt.Errorf("bluetooth: could not get bluetooth status. %w", err)
-		}
-
-		trimmedOutput := strings.TrimSpace(output)
+	if args.Event == events.Routine || args.Event == events.Forced || args.Event == events.SystemWoke || args.Event == "bluetooth_change" {
+		output, err := retryBlueutil(ctx, i.command, "-p", 5, time.Second)
 		var label, color, icon string
-
-		if trimmedOutput == "1" {
-			label = "On"
-			color = colors.Blue
-			icon = icons.Bluetooth
-		} else {
-			label = "Off"
-			color = colors.White
+		if err != nil {
+			i.logger.ErrorContext(ctx, "blueutil failed",
+				slog.String("error", err.Error()),
+				slog.String("output", output),
+			)
+			label = "?"
+			color = colors.Red
 			icon = icons.BluetoothOff
+		} else {
+			trimmedOutput := strings.TrimSpace(output)
+
+			if trimmedOutput == "1" {
+				label = "On"
+				color = colors.Blue
+				icon = icons.Bluetooth
+			} else {
+				label = "Off"
+				color = colors.White
+				icon = icons.BluetoothOff
+			}
 		}
 
 		bluetoothItem := sketchybar.ItemOptions{
@@ -118,6 +124,19 @@ func (i BluetoothItem) Update(
 	}
 
 	return batches, nil
+}
+
+func retryBlueutil(ctx context.Context, cmd *command.Command, arg string, retries int, delay time.Duration) (string, error) {
+	var out string
+	var err error
+	for i := 0; i < retries; i++ {
+		out, err = cmd.Run(ctx, "blueutil", arg)
+		if err == nil && strings.TrimSpace(out) != "" {
+			return out, nil
+		}
+		time.Sleep(delay)
+	}
+	return out, err
 }
 
 func isBluetooth(name string) bool {
