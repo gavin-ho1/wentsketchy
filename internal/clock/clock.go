@@ -10,7 +10,7 @@ const Date = "2006-01-02"
 const DateTime = "2006-01-02 03:04:05 PM"
 const Time = "03:04:05 PM"
 const HoursMinutes = "3:04 PM"
-const ShortDateTime = "Mon Jan 2nd | 3:04 PM"
+const ShortDateTime = "Mon Jan 2 | 3:04 PM"
 
 type SystemCock struct{}
 

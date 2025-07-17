@@ -77,18 +77,7 @@ func (i CalendarItem) Update(
 
 	if args.Event == events.Routine || args.Event == events.Forced {
 		now := time.Now()
-		day := now.Day()
-		suffix := "th"
-		switch day {
-		case 1, 21, 31:
-			suffix = "st"
-		case 2, 22:
-			suffix = "nd"
-		case 3, 23:
-			suffix = "rd"
-		}
-
-		formattedTime := now.Format("Mon Jan ") + formatter.Int(day) + suffix + now.Format(" | 3:04 PM")
+		formattedTime := formatter.ShortDateTime(now)
 
 		calendarItem := sketchybar.ItemOptions{
 			Label: sketchybar.ItemLabelOptions{
