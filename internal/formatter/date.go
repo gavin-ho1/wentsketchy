@@ -23,6 +23,11 @@ func HoursMinutes(time time.Time) string {
 	return time.Format(clock.HoursMinutes)
 }
 
+func ShortDateTime(time time.Time) string {
+	return time.Format(clock.ShortDateTime)
+}
+
+
 func Int(number int) string {
 	return strconv.Itoa(number)
 }
