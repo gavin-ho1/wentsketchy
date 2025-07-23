@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 type Aerospace interface {
@@ -42,7 +40,7 @@ type Data struct {
 	focusedApp         string
 	tree               *Tree
 
-	refreshTree *singleflight.Group
+	
 }
 
 func New(
@@ -50,19 +48,17 @@ func New(
 	api API,
 	treeBuilder TreeBuilder,
 ) *Data {
-	var g singleflight.Group
 	return &Data{
 		logger:      logger,
 		api:         api,
 		treeBuilder: treeBuilder,
-		refreshTree: &g,
 	}
 }
 
 func (data *Data) SingleFlightRefreshTree() {
 	data.logger.Info("aerospace: refreshing..")
-	_, err, shared := data.refreshTree.Do("refresh-aerospace-tree", data.refreshAerospaceData)
-	data.logger.Info("aerospace: refreshed", slog.Bool("shared", shared))
+	_, err := data.refreshAerospaceData()
+	data.logger.Info("aerospace: refreshed")
 
 	if err != nil {
 		data.logger.Error("aerospace: error while refreshing tree", slog.Any("err", err))
