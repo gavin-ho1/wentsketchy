@@ -424,6 +424,7 @@ func checker(batches Batches, position sketchybar.Position) (Batches, error) {
 		events.SpaceWindowsChange,
 		events.SystemWoke,
 		events.FrontAppSwitched,
+		aerospace_events.WorkspaceChange,
 	))
 
 	return batches, nil
