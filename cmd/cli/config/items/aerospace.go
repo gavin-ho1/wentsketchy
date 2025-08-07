@@ -423,7 +423,7 @@ func (item *AerospaceItem) windowToSketchybar(
 			"could not find icon for app",
 			slog.String("app", windowApp),
 		)
-		icon = ""
+		icon = icons.Unknown
 	}
 
 	windowVisibility := item.getWindowVisibility(isFocusedWorkspace)

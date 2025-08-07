@@ -41,6 +41,7 @@ const (
 	Book            = "􀤞"
 	Power           = "􀷄"
 	None            = ""
+	Unknown          = "󰀧"
 	Tails           = ""
 )
 
