@@ -130,7 +130,7 @@ func getBatteryStatus(percentage float64, state string) (string, string) {
 	// If the battery is actively charging, or is idle (plugged in and maintaining charge),
 	// or is full (implies plugged in and at 100%).
 	// This covers scenarios where the battery is connected to power.
-	if strings.Contains(state, "charging") || strings.Contains(state, "charged") || strings.Contains(state, "AC Power") {
+	if state == "charging" || state == "charged" || state == "AC Power" {
 		return icons.BatteryCharging, colors.Battery1 // Show charging icon
 	}
 
