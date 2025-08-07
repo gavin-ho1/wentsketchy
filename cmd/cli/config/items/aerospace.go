@@ -636,9 +636,17 @@ func (item AerospaceItem) handleWorkspaceChange(
 		}
 	}
 
-	// Update brackets for workspaces with moved windows
+	// Update/create brackets for workspaces with moved windows
 	for workspaceID := range workspacesNeedingUpdate {
-		batches = item.updateWorkspaceBracket(batches, workspaceID)
+		workspace := tree.IndexedWorkspaces[workspaceID]
+		if workspace != nil && len(workspace.Windows) > 0 {
+			// Workspace has windows, ensure bracket exists and is updated
+			batches = item.ensureWorkspaceBracket(batches, workspaceID, workspace.Windows)
+		} else {
+			// Workspace is now empty, remove bracket if it exists
+			sketchybarBracketID := getSketchybarBracketID(workspaceID)
+			batches = batch(batches, s("--remove", sketchybarBracketID))
+		}
 	}
 
 	// Now update workspace visual states and window visibility with animations
@@ -734,6 +742,60 @@ func (item AerospaceItem) handleWorkspaceChange(
 		}
 	}
 	
+	return batches
+}
+
+// ensureWorkspaceBracket creates a bracket if it doesn't exist, or updates it if it does
+func (item *AerospaceItem) ensureWorkspaceBracket(
+	batches Batches,
+	workspaceID aerospace.WorkspaceID,
+	windowIDs []aerospace.WindowID,
+) Batches {
+	// Build the list of member items for the bracket
+	members := []string{getSketchybarWorkspaceID(workspaceID)}
+	for _, windowID := range windowIDs {
+		members = append(members, getSketchybarWindowID(windowID))
+	}
+
+	sketchybarBracketID := getSketchybarBracketID(workspaceID)
+	
+	// Try to update first (this will work if bracket exists)
+	batches = batch(batches, s("--set", sketchybarBracketID, "members:="+strings.Join(members, " ")))
+	
+	// If the bracket doesn't exist, the above command will fail silently
+	// So we also try to create it with default styling
+	// The --add command will fail silently if the bracket already exists
+	colors := item.getWorkspaceColors(false) // Default to non-focused state, will be updated by animation later
+	
+	batches = batch(batches, m(s(
+		"--add",
+		"bracket",
+		sketchybarBracketID,
+		getSketchybarWorkspaceID(workspaceID)),
+		members[1:], // Skip the workspace ID since it's already included in --add bracket command
+	))
+
+	// Set the bracket properties
+	workspaceBracketItem := sketchybar.BracketOptions{
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "on",
+			Border: sketchybar.BorderOptions{
+				Color: colors.backgroundColor,
+			},
+			Color: sketchybar.ColorOptions{
+				Color: colorsPkg.Transparent,
+			},
+		},
+	}
+
+	batches = batch(batches, m(s("--set", sketchybarBracketID), workspaceBracketItem.ToArgs()))
+
+	item.logger.Debug("Ensured bracket exists", 
+		slog.String("workspace", workspaceID),
+		slog.String("bracket", sketchybarBracketID),
+		slog.String("members", strings.Join(members, " ")),
+	)
+
 	return batches
 }
 

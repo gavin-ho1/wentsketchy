@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
 
-	"github.com/distatus/battery"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
@@ -87,27 +90,19 @@ func (i BatteryItem) Update(
 	// Trigger an update if it's a routine update, a forced update,
 	// or if the power source changed (plugged in/unplugged).
 	if args.Event == events.Routine || args.Event == events.Forced || args.Event == events.PowerSourceChanged {
-		batteries, err := battery.GetAll()
-
+		cmd := exec.Command("pmset", "-g", "batt")
+		output, err := cmd.Output()
 		if err != nil {
-			return batches, fmt.Errorf("battery: could not get battery info. %w", err)
+			return batches, fmt.Errorf("battery: could not get battery info from pmset. %w", err)
 		}
 
-		if len(batteries) == 0 {
-			return batches, errors.New("battery: has no battery")
+		outputStr := string(output)
+		percentage, state, err := parsePmsetOutput(outputStr)
+		if err != nil {
+			return batches, fmt.Errorf("battery: could not parse pmset output. %w", err)
 		}
 
-		if len(batteries) > 1 {
-			i.logger.Warn(
-				"does not support multiple batteries",
-				slog.Int("batteries", len(batteries)),
-			)
-		}
-
-		battery := batteries[0]
-
-		percentage := getBatteryPercentage(battery)
-		icon, color := getBatteryStatus(percentage, battery.State)
+		icon, color := getBatteryStatus(percentage, state)
 
 		batteryItem := sketchybar.ItemOptions{
 			Icon: sketchybar.ItemIconOptions{
@@ -131,11 +126,11 @@ func isBattery(name string) bool {
 	return name == batteryItemName
 }
 
-func getBatteryStatus(percentage float64, state battery.State) (string, string) {
+func getBatteryStatus(percentage float64, state string) (string, string) {
 	// If the battery is actively charging, or is idle (plugged in and maintaining charge),
 	// or is full (implies plugged in and at 100%).
 	// This covers scenarios where the battery is connected to power.
-	if state.String() == "Charging" || state.String() == "Idle" || state.String() == "Full" {
+	if strings.Contains(state, "charging") || strings.Contains(state, "charged") || strings.Contains(state, "AC Power") {
 		return icons.BatteryCharging, colors.Battery1 // Show charging icon
 	}
 
@@ -157,8 +152,46 @@ func getBatteryStatus(percentage float64, state battery.State) (string, string) 
 	}
 }
 
-func getBatteryPercentage(battery *battery.Battery) float64 {
-	return (battery.Current / battery.Full) * 100
+func parsePmsetOutput(output string) (float64, string, error) {
+	// Regex to find percentage and state
+	// Example: ' 90%; discharging; 4:00 remaining'
+	// Example: '100%; charged; 0:00 remaining present: true'
+	// Example: 'Now drawing from 'AC Power''
+	percentageRegex := regexp.MustCompile(`(\d+)%;`)
+	stateRegex := regexp.MustCompile(`;\s*([^;]+);`)
+
+	percentageMatch := percentageRegex.FindStringSubmatch(output)
+	stateMatch := stateRegex.FindStringSubmatch(output)
+
+	percentage := 0.0
+	state := ""
+
+	if len(percentageMatch) > 1 {
+		p, err := strconv.ParseFloat(percentageMatch[1], 64)
+		if err != nil {
+			return 0, "", fmt.Errorf("failed to parse percentage: %w", err)
+		}
+		percentage = p
+	}
+
+	if len(stateMatch) > 1 {
+		state = strings.TrimSpace(stateMatch[1])
+	}
+
+	// Handle AC Power case where percentage and state might not be in the usual format
+	if strings.Contains(output, "AC Power") {
+		state = "AC Power"
+		// If on AC, and percentage is not found, assume 100% for display purposes
+		if percentage == 0.0 && !strings.Contains(output, "discharging") {
+			percentage = 100.0
+		}
+	}
+
+	if percentage == 0.0 && state == "" && !strings.Contains(output, "AC Power") {
+		return 0, "", errors.New("could not parse battery percentage or state from pmset output")
+	}
+
+	return percentage, state, nil
 }
 
 // Ensure BatteryItem implements WentsketchyItem interface
