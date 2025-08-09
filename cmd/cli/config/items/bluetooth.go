@@ -62,7 +62,7 @@ func (i BluetoothItem) Init(
 		UpdateFreq:   pointer(120),
 		Updates:      "on",
 		Script:       updateEvent,
-		ClickScript: "blueutil -p toggle && sketchybar --trigger bluetooth_change",
+		ClickScript: "sh -c 'blueutil -p toggle && sketchybar --trigger bluetooth_change'",
 	}
 
 	batches = batch(batches, s("--add", "item", bluetoothItemName, position))
