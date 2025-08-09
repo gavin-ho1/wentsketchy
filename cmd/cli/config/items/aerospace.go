@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
+	// "strings"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -123,60 +123,55 @@ func (item AerospaceItem) Update(
 // displayed. It creates, updates, or removes the bracket based on whether the
 // workspace contains windows and whether it is focused.
 func (item *AerospaceItem) updateWorkspaceBracket(
-	batches Batches,
-	workspaceID aerospace.WorkspaceID,
-	isFocused bool,
+    batches Batches,
+    workspaceID aerospace.WorkspaceID,
+    isFocused bool,
 ) Batches {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		return batches
-	}
+    tree := item.aerospace.GetTree()
+    if tree == nil {
+        return batches
+    }
 
-	workspace, found := tree.IndexedWorkspaces[workspaceID]
-	// If the workspace is not in the tree or has no windows, remove any associated bracket.
-	if !found || len(workspace.Windows) == 0 {
-		sketchybarBracketID := getSketchybarBracketID(workspaceID)
-		batches = batch(batches, s("--remove", sketchybarBracketID))
-		return batches
-	}
+    workspace, found := tree.IndexedWorkspaces[workspaceID]
+    sketchybarBracketID := getSketchybarBracketID(workspaceID)
+    
+    if !found || len(workspace.Windows) == 0 {
+        // Remove bracket if workspace has no windows
+        batches = batch(batches, s("--remove", sketchybarBracketID))
+        return batches
+    }
 
-	// If the workspace has windows, ensure the bracket exists and is correctly configured.
-	members := []string{getSketchybarWorkspaceID(workspaceID)}
-	for _, windowID := range workspace.Windows {
-		members = append(members, getSketchybarWindowID(windowID))
-	}
-	sketchybarBracketID := getSketchybarBracketID(workspaceID)
+    // Always remove and recreate bracket to ensure consistency
+    batches = batch(batches, s("--remove", sketchybarBracketID))
+    
+    // Create members list
+    members := []string{getSketchybarWorkspaceID(workspaceID)}
+    for _, windowID := range workspace.Windows {
+        members = append(members, getSketchybarWindowID(windowID))
+    }
 
-	// First, try to set the members. This works if the bracket already exists.
-	batches = batch(batches, s("--set", sketchybarBracketID, "members:="+strings.Join(members, " ")))
+    // Add bracket with all members
+    batches = batch(batches, m(s(
+        "--add", "bracket", sketchybarBracketID, getSketchybarWorkspaceID(workspaceID)),
+        members[1:], // Window IDs
+    ))
 
-	// Next, try to add the bracket. This works if the bracket does NOT exist.
-	// The command to add a bracket also sets its initial members.
-	batches = batch(batches, m(s(
-		"--add", "bracket", sketchybarBracketID, getSketchybarWorkspaceID(workspaceID)),
-		members[1:], // The rest of the members (window IDs)
-	))
+    // Set bracket visual properties
+    colors := item.getWorkspaceColors(isFocused)
+    workspaceBracketItem := sketchybar.BracketOptions{
+        Background: sketchybar.BackgroundOptions{
+            Drawing: "on",
+            Border: sketchybar.BorderOptions{
+                Color: colors.backgroundColor,
+            },
+            Color: sketchybar.ColorOptions{
+                Color: colorsPkg.Transparent,
+            },
+        },
+    }
+    batches = batch(batches, m(s("--set", sketchybarBracketID), workspaceBracketItem.ToArgs()))
 
-	// Finally, set the bracket's visual properties, using the correct focus state.
-	colors := item.getWorkspaceColors(isFocused)
-	workspaceBracketItem := sketchybar.BracketOptions{
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "on",
-			Border: sketchybar.BorderOptions{
-				Color: colors.backgroundColor,
-			},
-			Color: sketchybar.ColorOptions{
-				Color: colorsPkg.Transparent,
-			},
-		},
-	}
-	batches = batch(batches, m(s("--set", sketchybarBracketID), workspaceBracketItem.ToArgs()))
-
-	item.logger.Debug("Ensured bracket state is correct",
-		slog.String("workspace", workspaceID),
-		slog.Int("window_count", len(workspace.Windows)),
-	)
-	return batches
+    return batches
 }
 
 func (item AerospaceItem) CheckTree(
@@ -303,7 +298,7 @@ func (item AerospaceItem) CheckTree(
 	}
 
 	// Third pass: Update visibility for all windows
-	item.updateWindowVisibility(ctx, batches, focusedWorkspaceID)
+	batches = item.updateWindowVisibility(ctx, batches, focusedWorkspaceID)
 
 	// Update brackets for affected workspaces
 	for workspaceID := range workspacesNeedingUpdate {
@@ -315,55 +310,59 @@ func (item AerospaceItem) CheckTree(
 }
 
 func (item *AerospaceItem) updateWindowVisibility(
-	ctx context.Context,
-	batches Batches,
-	focusedWorkspaceID string,
-) {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		return
-	}
+    ctx context.Context,
+    batches Batches,
+    focusedWorkspaceID string,
+) Batches {  // Return Batches instead of void
+    tree := item.aerospace.GetTree()
+    if tree == nil {
+        return batches
+    }
 
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-			
-			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
-			windowVisibility := item.getWindowVisibility(isFocusedWorkspace)
+    for _, monitor := range tree.Monitors {
+        for _, workspace := range monitor.Workspaces {
+            if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+                continue
+            }
+            
+            isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
+            windowVisibility := item.getWindowVisibility(isFocusedWorkspace)
 
-			for _, windowID := range workspace.Windows {
-				sketchybarWindowID := getSketchybarWindowID(windowID)
-				
-				windowItem := &sketchybar.ItemOptions{
-					Width: windowVisibility.width,
-					Icon: sketchybar.ItemIconOptions{
-						Drawing: windowVisibility.show,
-					},
-				}
+            for _, windowID := range workspace.Windows {
+                sketchybarWindowID := getSketchybarWindowID(windowID)
+                
+                windowItem := &sketchybar.ItemOptions{
+                    Width: windowVisibility.width,
+                    Icon: sketchybar.ItemIconOptions{
+                        Drawing: windowVisibility.show,
+                    },
+                }
 
-				batches = batch(batches, m(
-					s("--set", sketchybarWindowID),
-					windowItem.ToArgs(),
-				))
-			}
-		}
-	}
+                batches = batch(batches, m(
+                    s("--set", sketchybarWindowID),
+                    windowItem.ToArgs(),
+                ))
+            }
+        }
+    }
+    
+    return batches
 }
 
 func (item AerospaceItem) handleFrontAppSwitched(
-	ctx context.Context,
-	batches Batches,
-	windowApp string,
+    ctx context.Context,
+    batches Batches,
+    windowApp string,
 ) Batches {
-	item.aerospace.SetFocusedApp(windowApp)
-
-	focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
-
-	batches = item.highlightWindows(batches, focusedWorkspaceID, windowApp)
-
-	return batches
+    item.aerospace.SetFocusedApp(windowApp)
+    
+    // CRITICAL: Refresh tree to ensure consistency
+    item.aerospace.SingleFlightRefreshTree()
+    
+    focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
+    batches = item.highlightWindows(batches, focusedWorkspaceID, windowApp)
+    
+    return batches
 }
 
 func (item AerospaceItem) workspaceToSketchybar(
@@ -805,6 +804,19 @@ func (item AerospaceItem) handleDisplayChange(batches Batches) Batches {
 
 				batches = batch(batches, m(s("--set", sketchybarWindowID), windowItem.ToArgs()))
 			}
+		}
+	}
+
+	// Ensure all brackets are consistent after display change
+	focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(context.Background())
+
+	for _, monitor := range tree.Monitors {
+		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+				continue
+			}
+			isFocused := workspace.Workspace == focusedWorkspaceID
+			batches = item.updateWorkspaceBracket(batches, workspace.Workspace, isFocused)
 		}
 	}
 
