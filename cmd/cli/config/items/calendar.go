@@ -52,7 +52,7 @@ func (i CalendarItem) Init(
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(30),
+		UpdateFreq: pointer(1),
 		Updates:    "on",
 		Script:     updateEvent,
 		// Click_script:            "$PLUGIN_DIR/zen.sh",
