@@ -41,13 +41,14 @@ const (
 	Book            = "􀤞"
 	Power           = "􀷄"
 	None            = ""
-	Unknown          = "󰀧"
+	Unknown         = "󰀧"
 	Tails           = ""
+	Work            = "" 
 )
 
 //nolint:gochecknoglobals // ok
 var Workspace = map[string]string{
-	"1": Email,
+	"1": Work,
 	"2": Code,
 	"3": Chat,
 	"4": Music,
@@ -55,4 +56,9 @@ var Workspace = map[string]string{
 	// "6": CPU,
 	// "7": Tools,
 	// "8": Documents,
+}
+
+type IconInfo struct {
+	Icon string
+	Font string
 }

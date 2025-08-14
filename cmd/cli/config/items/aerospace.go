@@ -415,14 +415,14 @@ func (item *AerospaceItem) windowToSketchybar(
 	workspaceID aerospace.WorkspaceID,
 	windowApp string,
 ) *sketchybar.ItemOptions {
-	icon, hasIcon := icons.App[windowApp]
+	iconInfo, hasIcon := icons.App[windowApp]
 
 	if !hasIcon {
 		item.logger.Info(
 			"could not find icon for app",
 			slog.String("app", windowApp),
 		)
-		icon = icons.Unknown
+		iconInfo = icons.IconInfo{Icon: icons.Unknown, Font: settings.FontAppIcon}
 	}
 
 	windowVisibility := item.getWindowVisibility(isFocusedWorkspace)
@@ -438,7 +438,7 @@ func (item *AerospaceItem) windowToSketchybar(
 				Color: windowVisibility.color,
 			},
 			Font: sketchybar.FontOptions{
-				Font: settings.FontAppIcon,
+				Font: iconInfo.Font,
 				Kind: "Regular",
 				Size: "14.0",
 			},
@@ -446,7 +446,7 @@ func (item *AerospaceItem) windowToSketchybar(
 				Left:  settings.Sketchybar.Aerospace.Padding,
 				Right: settings.Sketchybar.Aerospace.Padding,
 			},
-			Value: icon,
+			Value: iconInfo.Icon,
 		},
 		ClickScript: fmt.Sprintf(`aerospace workspace "%s"`, workspaceID),
 	}
