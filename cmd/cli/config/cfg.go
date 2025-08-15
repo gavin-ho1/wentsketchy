@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
 	"github.com/lucax88x/wentsketchy/internal/homedir"
 	"gopkg.in/yaml.v2"
 )
@@ -17,8 +18,19 @@ type Cfg struct {
 	RightNotch []string `yaml:"right_notch"`
 }
 
+type ConfigData struct {
+	Left       []string `yaml:"left"`
+	Center     []string `yaml:"center"`
+	Right      []string `yaml:"right"`
+	LeftNotch  []string `yaml:"left_notch"`
+	RightNotch []string `yaml:"right_notch"`
+	Icons      struct {
+		Workspace map[string]string `yaml:"workspace"`
+	} `yaml:"icons"`
+}
+
 func ReadYaml() (*Cfg, error) {
-	var cfg Cfg
+	var configData ConfigData
 
 	dir, err := homedir.Get()
 
@@ -34,12 +46,22 @@ func ReadYaml() (*Cfg, error) {
 		return nil, fmt.Errorf("config: could not read file. %v", err)
 	}
 
-	err = yaml.Unmarshal(yamlData, &cfg)
+	err = yaml.Unmarshal(yamlData, &configData)
 
 	if err != nil {
 		//nolint:errorlint // no wrap
 		return nil, fmt.Errorf("config: could not unmarshal cfg. %v", err)
 	}
 
-	return &cfg, nil
+	if configData.Icons.Workspace != nil {
+		icons.Workspace = configData.Icons.Workspace
+	}
+
+	return &Cfg{
+		Left:       configData.Left,
+		Center:     configData.Center,
+		Right:      configData.Right,
+		LeftNotch:  configData.LeftNotch,
+		RightNotch: configData.RightNotch,
+	}, nil
 }

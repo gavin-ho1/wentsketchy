@@ -44,6 +44,7 @@ const (
 	Unknown         = "󰀧"
 	Tails           = ""
 	Work            = "" 
+	Settings        = ""
 )
 
 //nolint:gochecknoglobals // ok
@@ -53,7 +54,7 @@ var Workspace = map[string]string{
 	"3": Chat,
 	"4": Music,
 	"5": Video,
-	// "6": CPU,
+	"6": Settings,
 	// "7": Tools,
 	// "8": Documents,
 }
