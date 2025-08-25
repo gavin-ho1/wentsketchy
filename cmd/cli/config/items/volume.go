@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -65,7 +66,6 @@ func (i VolumeItem) Init(
 		Script:     updateEvent,
 		ClickScript: `sh -c "osascript -e 'set volume output muted not (output muted of (get volume settings))' && sketchybar --trigger volume_change"`,
 	}
-	
 
 	batches = batch(batches, s("--add", "item", volumeItemName, position))
 	batches = batch(batches, m(s("--set", volumeItemName), volumeItem.ToArgs()))
@@ -104,14 +104,21 @@ end if
 			icon = icons.VolumeMute
 			// To get the volume level even when muted, we need another call
 			volumeLevelOutput, _ := i.command.Run(ctx, "osascript", "-e", "output volume of (get volume settings)")
-			label = fmt.Sprintf("%s%%", strings.TrimSpace(volumeLevelOutput))
+			volume, err := strconv.Atoi(strings.TrimSpace(volumeLevelOutput))
+			if err != nil {
+				label = fmt.Sprintf("%s%%", strings.TrimSpace(volumeLevelOutput))
+			} else {
+				roundedVolume := int(math.Round(float64(volume)/5.0) * 5.0)
+				label = fmt.Sprintf("%d%%", roundedVolume)
+			}
 		} else {
 			volume, err := strconv.Atoi(trimmedOutput)
 			if err != nil {
 				return batches, fmt.Errorf("volume: could not parse volume percentage. %w", err)
 			}
-			icon = getVolumeIcon(volume)
-			label = fmt.Sprintf("%d%%", volume)
+			roundedVolume := int(math.Round(float64(volume)/5.0) * 5.0)
+			icon = getVolumeIcon(roundedVolume)
+			label = fmt.Sprintf("%d%%", roundedVolume)
 		}
 
 		volumeItem := sketchybar.ItemOptions{

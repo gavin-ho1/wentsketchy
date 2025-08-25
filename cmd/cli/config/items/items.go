@@ -27,7 +27,7 @@ type WentsketchyItems struct {
 	MainIcon    MainIconItem
 	Calendar    CalendarItem
 	FrontApp    FrontAppItem
-	Aerospace   AerospaceItem
+	Aerospace   *AerospaceItem
 	Battery     BatteryItem
 	CPU         CPUItem
 	Sensors     SensorsItem
