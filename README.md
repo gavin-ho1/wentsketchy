@@ -60,16 +60,23 @@ and put in ~/.config/sketchybar/config.yaml the wentsketchy configuration
 ```yaml
 ---
 left:
-  - main_icon
   - aerospace
-right_notch:
   - front_app
+
 right:
-  - sensors
-  - cpu
+  - bluetooth
+  - volume
+  - wifi
   - battery
   - calendar
 ```
+
+## My Personal Changes
+
+Requires a few different fonts to render correctly:
+ - [SF Symbols](https://developer.apple.com/sf-symbols/)
+ - A nerd font
+ - sketchybar-app-font
 
 ### architecture
 
