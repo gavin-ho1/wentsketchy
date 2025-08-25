@@ -66,7 +66,7 @@ var Sketchybar = Settings{
 		WorkspaceFocusedColor:           colors.Black1,
 		WindowColor:                     colors.WhiteA40,
 		WindowFocusedColor:              colors.White,
-		TransitionTime:                  "5",
+		TransitionTime:                  "1",
 	},
 }
 
