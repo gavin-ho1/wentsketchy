@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	// "strings"
+	"sync"
+    "time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -26,7 +27,81 @@ type AerospaceItem struct {
 	sketchybar sketchybar.API
 
 	position  sketchybar.Position
-	windowIDs map[aerospace.WindowID]aerospace.WorkspaceID
+		windowIDs map[aerospace.WindowID]aerospace.WorkspaceID
+	syncCallback func(context.Context, *args.In)
+
+	// Add these new fields for polling
+	pollTimer    *time.Timer
+	pollMutex    sync.Mutex
+	lastPollTime time.Time
+	isPolling    bool
+}
+
+const (
+	pollDelay = 100 * time.Millisecond  // Wait 500ms before polling
+	pollDebounce = 10 * time.Millisecond // Minimum time between polls
+)
+
+func (item *AerospaceItem) startDelayedPoll(ctx context.Context) {
+	item.pollMutex.Lock()
+	defer item.pollMutex.Unlock()
+	
+	// Cancel existing timer if running
+	if item.pollTimer != nil {
+		item.pollTimer.Stop()
+	}
+	
+	// Don't start new poll if we just polled recently
+	if time.Since(item.lastPollTime) < pollDebounce {
+		return
+	}
+	
+	item.pollTimer = time.AfterFunc(pollDelay, func() {
+		item.pollMutex.Lock()
+		defer item.pollMutex.Unlock()
+		
+		if item.isPolling {
+			return // Already polling
+		}
+		
+		item.isPolling = true
+		item.lastPollTime = time.Now()
+		
+		// Perform the polling check
+		go func() {
+			defer func() {
+				item.pollMutex.Lock()
+				item.isPolling = false
+				item.pollMutex.Unlock()
+			}()
+			
+			item.logger.Debug("Starting delayed poll for aerospace sync")
+			
+			// Create a synthetic event to trigger tree check
+			syntheticArgs := &args.In{
+				Name:  AerospaceName,
+				Event: events.SpaceWindowsChange,
+				Info:  "",
+			}
+			
+			// This will trigger the normal Update flow
+			if callback := item.syncCallback; callback != nil {
+				callback(ctx, syntheticArgs)
+			}
+		}()
+	})
+}
+
+
+
+func (item *AerospaceItem) performSyncCheck(ctx context.Context, batches Batches) (Batches, error) {
+	item.logger.Debug("Performing sync check")
+	
+	// Force refresh the tree
+	item.aerospace.SingleFlightRefreshTree()
+	
+	// Run the normal CheckTree logic
+	return item.CheckTree(ctx, batches)
 }
 
 func NewAerospaceItem(
@@ -40,6 +115,11 @@ func NewAerospaceItem(
 		sketchybarAPI,
 		sketchybar.PositionLeft,
 		make(map[int]string, 0),
+		nil, // syncCallback
+		nil,  // pollTimer
+		sync.Mutex{}, // pollMutex
+		time.Time{}, // lastPollTime
+		false, // isPolling
 	}
 }
 
@@ -362,8 +442,12 @@ func (item AerospaceItem) handleFrontAppSwitched(
     focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
     batches = item.highlightWindows(batches, focusedWorkspaceID, windowApp)
     
+    // ADD POLLING: Start delayed poll to catch any missed changes
+    item.startDelayedPoll(ctx)
+    
     return batches
 }
+
 
 func (item AerospaceItem) workspaceToSketchybar(
 	isFocusedWorkspace bool,
@@ -752,6 +836,9 @@ func (item AerospaceItem) handleWorkspaceChange(
 			}
 		}
 	}
+	
+	// ADD POLLING: Start delayed poll to catch any missed changes
+	item.startDelayedPoll(ctx)
 	
 	return batches
 }
