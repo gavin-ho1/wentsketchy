@@ -93,6 +93,6 @@ func getYOffsetForMonitor(name string) int {
 	case strings.Contains(name, "LG HDR 4K"):
 		return 0
 	default:
-		return 5
+		return 3
 	}
 }
