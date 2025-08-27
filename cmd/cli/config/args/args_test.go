@@ -15,7 +15,7 @@ func TestUnitArgs(t *testing.T) {
 
 		// THEN
 		require.NoError(t, err)
-		require.Equal(t, `echo "update args: {\"name\":\"$NAME\",\"event\":\"$SENDER\",\"button\":\"$BUTTON\",\"modifier\":\"$MODIFIER\"} info: $INFO ¬" > /path`, event)
+		require.Equal(t, `echo "update args: {\"name\":\"$NAME\",\"event\":\"$SENDER\",\"button\":\"$BUTTON\",\"modifier\":\"$MODIFIER\"} info: $INFO ¬" >> /tmp/wentsketchy`, event)
 	})
 
 	t.Run("should extract args from event", func(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
@@ -51,19 +50,12 @@ func (f FifoServer) Start(ctx context.Context) {
 		}
 	}(ctx)
 
-	var wg sync.WaitGroup
-
 	for {
 		select {
 		case msg := <-ch:
-			wg.Add(1)
-			go func(msg string) {
-				defer wg.Done()
-				f.handle(ctx, msg)
-			}(msg)
+			f.handle(ctx, msg)
 		case <-ctx.Done():
 			f.logger.InfoContext(ctx, "server: cancel")
-			wg.Wait()
 			return
 		}
 	}

@@ -47,13 +47,25 @@ func runStartCmd() runner.RunE {
 		_ []string,
 		di *wentsketchy.Wentsketchy,
 	) error {
+		err := runner.CreatePidFile(settings.PidFilePath)
+		if err != nil {
+			return fmt.Errorf("start: %w", err)
+		}
+
+		defer func() {
+			err := runner.RemovePidFile(settings.PidFilePath)
+			if err != nil {
+				di.Logger.ErrorContext(ctx, "start: could not remove pid file", slog.Any("error", err))
+			}
+		}()
+
 		di.Logger.InfoContext(
 			ctx,
 			"start: starting fifo",
 			slog.String("path", settings.FifoPath),
 		)
 
-		err := di.Fifo.Start(settings.FifoPath)
+		err = di.Fifo.Start(settings.FifoPath)
 
 		if err != nil {
 			return fmt.Errorf("start: could not start fifo %w", err)
