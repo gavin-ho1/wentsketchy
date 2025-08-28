@@ -26,7 +26,7 @@ func (c Command) Run(ctx context.Context, name string, arg ...string) (string, e
 		c.logger.DebugContext(ctx, "command: took", slog.String("name", name), slog.Duration("elapsed", elapsed))
 	}()
 
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 
 	c.logger.DebugContext(ctx, "command: env", slog.Any("env", cmd.Env))
 
@@ -43,7 +43,7 @@ func (c Command) Run(ctx context.Context, name string, arg ...string) (string, e
 }
 
 func (c Command) RunBufferized(ctx context.Context, name string, arg ...string) (bytes.Buffer, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()

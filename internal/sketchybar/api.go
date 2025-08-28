@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lucax88x/wentsketchy/internal/command"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar/query"
@@ -57,6 +58,9 @@ func (api realAPI) run(ctx context.Context, arg ...string) (string, error) {
 		// api.logger.InfoContext(ctx, "sketchybar: no commands, skipping")
 		return "", nil
 	}
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
 
 	out, err := api.command.Run(ctx, "sketchybar", flattenAndFix(arg)...)
 

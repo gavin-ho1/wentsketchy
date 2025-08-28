@@ -61,7 +61,7 @@ func (i BatteryItem) Init(
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(120), // This is for routine updates every 120 seconds
+		UpdateFreq: pointer(1), // This is for routine updates every 1 seconds
 		Updates:    "on",
 		Script:     updateEvent,
 	}
