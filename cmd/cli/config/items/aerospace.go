@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"sync"
-	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -22,39 +20,25 @@ import (
 )
 
 type AerospaceItem struct {
-	logger       *slog.Logger
-	aerospace    aerospace.Aerospace
-	sketchybar   sketchybar.API
-	position     sketchybar.Position
-	windowIDs    map[aerospace.WindowID]aerospace.WorkspaceID
-	syncCallback func(context.Context, *args.In)
-	pollTimer    *time.Timer
-	pollMutex    sync.Mutex
-	lastPollTime time.Time
-	isPolling    bool
-	isAnimating  bool
+	logger        *slog.Logger
+	aerospace     aerospace.Aerospace
+	sketchybar    sketchybar.API
+	position      sketchybar.Position
+	renderedItems map[string]bool
 }
-
-const (
-	pollDelay    = 100 * time.Millisecond
-	pollDebounce = 10 * time.Millisecond
-)
 
 func NewAerospaceItem(
 	logger *slog.Logger,
 	aerospace aerospace.Aerospace,
 	sketchybarAPI sketchybar.API,
 ) *AerospaceItem {
-	item := &AerospaceItem{
-		logger:      logger,
-		aerospace:   aerospace,
-		sketchybar:  sketchybarAPI,
-		position:    sketchybar.PositionLeft,
-		windowIDs:   make(map[int]string, 0),
-		isPolling:   false,
-		isAnimating: false,
+	return &AerospaceItem{
+		logger:        logger,
+		aerospace:     aerospace,
+		sketchybar:    sketchybarAPI,
+		position:      sketchybar.PositionLeft,
+		renderedItems: make(map[string]bool),
 	}
-	return item
 }
 
 const aerospaceCheckerItemName = "aerospace.checker"
@@ -71,18 +55,7 @@ func (item *AerospaceItem) Init(
 	batches Batches,
 ) (Batches, error) {
 	item.position = position
-
-	batches, err := item.applyTree(ctx, batches, position)
-	if err != nil {
-		return batches, err
-	}
-
-	batches, err = checker(batches, position)
-	if err != nil {
-		return batches, err
-	}
-
-	return batches, nil
+	return item.render(ctx, batches, position)
 }
 
 func (item *AerospaceItem) Update(
@@ -106,244 +79,152 @@ func (item *AerospaceItem) Update(
 			return batches, fmt.Errorf("aerospace: could not deserialize json for workspace-change. %v", args.Info)
 		}
 		item.aerospace.SetFocusedWorkspaceID(data.Focused)
-		batches = item.handleWorkspaceChange(ctx, batches, data.Prev, data.Focused)
-	case events.SpaceWindowsChange:
-		batches, err = item.CheckTree(ctx, batches)
-	case events.DisplayChange:
-		batches = item.handleDisplayChange(batches)
 	case events.FrontAppSwitched:
-		batches = item.handleFrontAppSwitched(ctx, batches, args.Info)
+		item.aerospace.SetFocusedApp(args.Info)
 	}
 
-	return batches, err
+	return item.render(ctx, batches, position)
 }
 
-func (item *AerospaceItem) updateWorkspaceBracket(
-	batches Batches,
-	workspaceID aerospace.WorkspaceID,
-	isFocused bool,
-) Batches {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		return batches
-	}
-
-	workspace, found := tree.IndexedWorkspaces[workspaceID]
-	sketchybarBracketID := getSketchybarBracketID(workspaceID)
-
-	if !found || len(workspace.Windows) == 0 {
-		batches = batch(batches, s("--remove", sketchybarBracketID))
-		return batches
-	}
-
-	batches = batch(batches, s("--remove", sketchybarBracketID))
-
-	members := []string{getSketchybarWorkspaceID(workspaceID)}
-	for _, windowID := range workspace.Windows {
-		members = append(members, getSketchybarWindowID(windowID))
-	}
-
-	batches = batch(batches, m(s(
-		"--add", "bracket", sketchybarBracketID, getSketchybarWorkspaceID(workspaceID)),
-		members[1:],
-	))
-
-	colors := item.getWorkspaceColors(isFocused)
-	workspaceBracketItem := sketchybar.BracketOptions{
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "on",
-			Border: sketchybar.BorderOptions{
-				Color: colors.backgroundColor,
-			},
-			Color: sketchybar.ColorOptions{
-				Color: colorsPkg.Transparent,
-			},
-		},
-	}
-	batches = batch(batches, m(s("--set", sketchybarBracketID), workspaceBracketItem.ToArgs()))
-
-	return batches
-}
-
-func (item *AerospaceItem) CheckTree(
+func (item *AerospaceItem) render(
 	ctx context.Context,
 	batches Batches,
+	position sketchybar.Position,
 ) (Batches, error) {
-	if item.isAnimating {
-		item.logger.Info("animation in progress, skipping check tree")
-		return batches, nil
-	}
-	item.logger.Info("Checking aerospace tree for updates")
 	item.aerospace.SingleFlightRefreshTree()
 	tree := item.aerospace.GetTree()
-
 	if tree == nil {
-		item.logger.Error("Tree is nil after refresh")
+		item.logger.Error("Tree is nil during render")
 		return batches, errors.New("aerospace tree is nil")
 	}
 
 	focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
-	item.logger.Debug("Focused workspace", slog.String("workspace", focusedWorkspaceID))
+	newItems := make(map[string]bool)
 
-	var aggregatedErr error
-	workspacesNeedingUpdate := make(map[aerospace.WorkspaceID]bool)
+	// --- 1. Determine all items that should be on the bar ---
+	newItems[aerospaceCheckerItemName] = true
+	newItems["aerospace.spacer"] = true
 
 	for _, monitor := range tree.Monitors {
+		visibleWorkspaces := []*aerospace.WorkspaceWithWindowIDs{}
 		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
+			if _, ok := icons.Workspace[workspace.Workspace]; ok {
+				visibleWorkspaces = append(visibleWorkspaces, workspace)
+			}
+		}
+
+		for i, workspace := range visibleWorkspaces {
+			newItems[getSketchybarWorkspaceID(workspace.Workspace)] = true
+			for _, windowID := range workspace.Windows {
+				newItems[getSketchybarWindowID(windowID)] = true
+			}
+			if len(workspace.Windows) > 0 {
+				newItems[getSketchybarBracketID(workspace.Workspace)] = true
+			}
+			if i < len(visibleWorkspaces)-1 {
+				newItems[getSketchybarSpacerID(workspace.Workspace)] = true
+			}
+		}
+	}
+
+	// --- 2. Remove items that are no longer needed ---
+	for itemID := range item.renderedItems {
+		if !newItems[itemID] {
+			batches = batch(batches, s("--remove", itemID))
+		}
+	}
+
+	// --- 3. Add or update items ---
+	var aggregatedErr error
+
+	// Checker
+	if !item.renderedItems[aerospaceCheckerItemName] {
+		var err error
+		batches, err = checker(batches, position)
+		if err != nil {
+			aggregatedErr = errors.Join(aggregatedErr, err)
+		}
+	}
+
+	// Spacer
+	aerospaceSpacerItem := sketchybar.ItemOptions{
+		Width:      pointer(*settings.Sketchybar.ItemSpacing * 2),
+		Background: sketchybar.BackgroundOptions{Drawing: "off"},
+	}
+	sketchybarSpacerID := "aerospace.spacer"
+	if !item.renderedItems[sketchybarSpacerID] {
+		batches = batch(batches, s("--add", "item", sketchybarSpacerID, position))
+	}
+	batches = batch(batches, m(s("--set", sketchybarSpacerID), aerospaceSpacerItem.ToArgs()))
+
+	// Workspaces, windows, brackets, spacers
+	for _, monitor := range tree.Monitors {
+		visibleWorkspaces := []*aerospace.WorkspaceWithWindowIDs{}
+		for _, workspace := range monitor.Workspaces {
+			if _, ok := icons.Workspace[workspace.Workspace]; ok {
+				visibleWorkspaces = append(visibleWorkspaces, workspace)
+			}
+		}
+
+		for i, workspace := range visibleWorkspaces {
+			isFocusedWorkspace := focusedWorkspaceID == workspace.Workspace
+			sketchybarSpaceID := getSketchybarWorkspaceID(workspace.Workspace)
+			workspaceSpace, err := item.workspaceToSketchybar(
+				isFocusedWorkspace, len(tree.Monitors), monitor.Monitor, workspace.Workspace,
+			)
+			if err != nil {
+				aggregatedErr = errors.Join(aggregatedErr, err)
 				continue
 			}
 
-			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
+			if !item.renderedItems[sketchybarSpaceID] {
+				batches = batch(batches, s("--add", "item", sketchybarSpaceID, position))
+			}
+			batches = batch(batches, m(
+				s("--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime, "--set", sketchybarSpaceID),
+				workspaceSpace.ToArgs(),
+			))
 
-			for _, windowID := range workspace.Windows {
+			sketchybarWindowIDs := make([]string, len(workspace.Windows))
+			prevSketchybarItemID := sketchybarSpaceID // Start positioning after the workspace icon
+			for j, windowID := range workspace.Windows {
 				window := tree.IndexedWindows[windowID]
 				if window == nil {
-					item.logger.Warn("Window not found in tree", slog.Int("windowID", windowID))
 					continue
 				}
-
-				currentWorkspaceID, found := item.windowIDs[windowID]
-
-				if found {
-					if currentWorkspaceID != workspace.Workspace {
-						item.logger.Info("Moving window to new workspace",
-							slog.Int("window.id", window.ID),
-							slog.String("window.app", window.App),
-							slog.String("old.workspace", currentWorkspaceID),
-							slog.String("new.workspace", workspace.Workspace),
-						)
-
-						workspacesNeedingUpdate[currentWorkspaceID] = true
-						workspacesNeedingUpdate[workspace.Workspace] = true
-
-						windowItem := item.windowToSketchybar(
-							isFocusedWorkspace,
-							monitor.Monitor,
-							workspace.Workspace,
-							window.App,
-						)
-
-						batches = batch(batches, m(
-							s("--set", getSketchybarWindowID(windowID)),
-							windowItem.ToArgs(),
-						))
-
-						batches = batch(batches, s(
-							"--move",
-							getSketchybarWindowID(windowID),
-							"after",
-							getSketchybarWorkspaceID(workspace.Workspace),
-						))
-
-						batches = batch(batches, s(
-							"--set",
-							getSketchybarWindowID(windowID),
-							"display="+strconv.Itoa(monitor.Monitor),
-						))
-
-						item.windowIDs[windowID] = workspace.Workspace
-					}
-				} else {
-					item.logger.Info("Adding new window to workspace",
-						slog.Int("window.id", window.ID),
-						slog.String("window.app", window.App),
-						slog.String("workspace", workspace.Workspace),
-					)
-
-					var sketchybarWindowID string
-					batches, sketchybarWindowID = item.addWindowToSketchybar(
-						batches,
-						item.position,
-						isFocusedWorkspace,
-						monitor.Monitor,
-						workspace.Workspace,
-						window.ID,
-						window.App,
-					)
-
-					batches = batch(batches, s(
-						"--move",
-						sketchybarWindowID,
-						"after",
-						getSketchybarWorkspaceID(workspace.Workspace),
-					))
-
-					workspacesNeedingUpdate[workspace.Workspace] = true
-				}
-			}
-		}
-	}
-
-	for windowID := range item.windowIDs {
-		if _, found := tree.IndexedWindows[windowID]; !found {
-			item.logger.Info("Removing window", slog.Int("windowID", windowID))
-			oldWorkspaceID := item.windowIDs[windowID]
-			batches = item.removeWindow(batches, windowID)
-			workspacesNeedingUpdate[oldWorkspaceID] = true
-		}
-	}
-
-	batches = item.updateWindowVisibility(ctx, batches, focusedWorkspaceID)
-
-	for workspaceID := range workspacesNeedingUpdate {
-		isFocused := workspaceID == focusedWorkspaceID
-		batches = item.updateWorkspaceBracket(batches, workspaceID, isFocused)
-	}
-
-	return batches, aggregatedErr
-}
-
-func (item *AerospaceItem) updateWindowVisibility(
-	ctx context.Context,
-	batches Batches,
-	focusedWorkspaceID string,
-) Batches {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		return batches
-	}
-
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-
-			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
-			windowVisibility := item.getWindowVisibility(isFocusedWorkspace)
-
-			for _, windowID := range workspace.Windows {
+				windowItem := item.windowToSketchybar(isFocusedWorkspace, monitor.Monitor, workspace.Workspace, window.App)
 				sketchybarWindowID := getSketchybarWindowID(windowID)
-
-				windowItem := &sketchybar.ItemOptions{
-					Width: windowVisibility.width,
-					Icon: sketchybar.ItemIconOptions{
-						Drawing: windowVisibility.show,
-					},
+				if !item.renderedItems[sketchybarWindowID] {
+					batches = batch(batches, s("--add", "item", sketchybarWindowID, position))
 				}
-
 				batches = batch(batches, m(
-					s("--set", sketchybarWindowID),
+					s("--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime, "--set", sketchybarWindowID),
 					windowItem.ToArgs(),
 				))
+				batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
+				prevSketchybarItemID = sketchybarWindowID
+				sketchybarWindowIDs[j] = sketchybarWindowID
+			}
+
+			if len(workspace.Windows) > 0 {
+				sketchybarBracketID := getSketchybarBracketID(workspace.Workspace)
+				if item.renderedItems[sketchybarBracketID] {
+					batches = batch(batches, s("--remove", sketchybarBracketID))
+				}
+				batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
+			}
+
+			if i < len(visibleWorkspaces)-1 {
+				spacerID := getSketchybarSpacerID(workspace.Workspace)
+				if !item.renderedItems[spacerID] {
+					batches = item.addWorkspaceSpacer(batches, workspace.Workspace, position)
+				}
 			}
 		}
 	}
 
-	return batches
-}
-
-func (item *AerospaceItem) handleFrontAppSwitched(
-	ctx context.Context,
-	batches Batches,
-	windowApp string,
-) Batches {
-	item.aerospace.SetFocusedApp(windowApp)
-	item.aerospace.SingleFlightRefreshTree()
-	focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
-	batches = item.highlightWindows(batches, focusedWorkspaceID, windowApp)
-	return batches
+	item.renderedItems = newItems
+	return batches, aggregatedErr
 }
 
 func (item *AerospaceItem) workspaceToSketchybar(
@@ -455,42 +336,6 @@ func getSketchybarSpacerID(spaceID aerospace.WorkspaceID) string {
 	return fmt.Sprintf("%s.%s", spacerItemPrefix, spaceID)
 }
 
-func (item *AerospaceItem) removeWindow(batches Batches, windowID aerospace.WindowID) Batches {
-	_, found := item.windowIDs[windowID]
-	if found {
-		delete(item.windowIDs, windowID)
-		batches = batch(batches, s("--remove", getSketchybarWindowID(windowID)))
-		item.logger.Debug("Removed window", slog.Int("windowID", windowID))
-	}
-	return batches
-}
-
-func (item *AerospaceItem) addWindowToSketchybar(
-	batches Batches,
-	position sketchybar.Position,
-	isFocusedWorkspace bool,
-	monitorID aerospace.MonitorID,
-	workspaceID aerospace.WorkspaceID,
-	windowID aerospace.WindowID,
-	windowApp string,
-) (Batches, string) {
-	windowItem := item.windowToSketchybar(
-		isFocusedWorkspace,
-		monitorID,
-		workspaceID,
-		windowApp,
-	)
-
-	sketchybarWindowID := getSketchybarWindowID(windowID)
-
-	item.windowIDs[windowID] = workspaceID
-
-	batches = batch(batches, s("--add", "item", sketchybarWindowID, position))
-	batches = batch(batches, m(s("--set", sketchybarWindowID), windowItem.ToArgs()))
-
-	return batches, sketchybarWindowID
-}
-
 func checker(batches Batches, position sketchybar.Position) (Batches, error) {
 	updateEvent, err := args.BuildEvent()
 	if err != nil {
@@ -565,171 +410,6 @@ func (item *AerospaceItem) getWindowVisibility(isFocusedWorkspace bool) *windowV
 	}
 }
 
-func (item *AerospaceItem) handleWorkspaceChange(
-	ctx context.Context,
-	batches Batches,
-	prevWorkspaceID string,
-	focusedWorkspaceID string,
-) Batches {
-	item.isAnimating = true
-	go func() {
-		transitionTime, err := strconv.Atoi(settings.Sketchybar.Aerospace.TransitionTime)
-		if err != nil {
-			transitionTime = 1
-		}
-		time.Sleep(time.Duration(transitionTime) * time.Second)
-		item.isAnimating = false
-	}()
-
-	item.aerospace.SingleFlightRefreshTree()
-	tree := item.aerospace.GetTree()
-
-	if tree == nil {
-		item.logger.Error("Tree is nil during workspace change")
-		return batches
-	}
-
-	workspacesNeedingUpdate := make(map[aerospace.WorkspaceID]bool)
-
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-
-			for _, windowID := range workspace.Windows {
-				window := tree.IndexedWindows[windowID]
-				if window == nil {
-					continue
-				}
-
-				currentWorkspaceID, found := item.windowIDs[windowID]
-
-				if found && currentWorkspaceID != workspace.Workspace {
-					item.logger.Info("Moving window during workspace change",
-						slog.Int("window.id", window.ID),
-						slog.String("window.app", window.App),
-						slog.String("old.workspace", currentWorkspaceID),
-						slog.String("new.workspace", workspace.Workspace),
-					)
-
-					workspacesNeedingUpdate[currentWorkspaceID] = true
-					workspacesNeedingUpdate[workspace.Workspace] = true
-
-					batches = batch(batches, s(
-						"--move",
-						getSketchybarWindowID(windowID),
-						"after",
-						getSketchybarWorkspaceID(workspace.Workspace),
-					))
-
-					batches = batch(batches, s(
-						"--set",
-						getSketchybarWindowID(windowID),
-						"display="+strconv.Itoa(monitor.Monitor),
-					))
-
-					item.windowIDs[windowID] = workspace.Workspace
-				}
-			}
-		}
-	}
-
-	for workspaceID := range workspacesNeedingUpdate {
-		isFocused := workspaceID == focusedWorkspaceID
-		batches = item.updateWorkspaceBracket(batches, workspaceID, isFocused)
-	}
-
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-
-			isFocusedWorkspace := workspace.Workspace == focusedWorkspaceID
-
-			sketchybarWorkspaceID := getSketchybarWorkspaceID(workspace.Workspace)
-			colors := item.getWorkspaceColors(isFocusedWorkspace)
-			workspaceItem := &sketchybar.ItemOptions{
-				Background: sketchybar.BackgroundOptions{
-					Color: sketchybar.ColorOptions{
-						Color: colors.backgroundColor,
-					},
-				},
-				Icon: sketchybar.ItemIconOptions{
-					Color: sketchybar.ColorOptions{
-						Color: colors.color,
-					},
-				},
-			}
-
-			batches = batch(batches, m(
-				s(
-					"--animate",
-					sketchybar.AnimationTanh,
-					settings.Sketchybar.Aerospace.TransitionTime,
-					"--set",
-					sketchybarWorkspaceID,
-				),
-				workspaceItem.ToArgs(),
-			))
-
-			sketchybarBracketID := getSketchybarBracketID(workspace.Workspace)
-			bracketItem := sketchybar.BracketOptions{
-				Background: sketchybar.BackgroundOptions{
-					Border: sketchybar.BorderOptions{
-						Color: colors.backgroundColor,
-					},
-				},
-			}
-
-			batches = batch(batches, m(
-				s(
-					"--animate",
-					sketchybar.AnimationTanh,
-					settings.Sketchybar.Aerospace.TransitionTime,
-					"--set",
-					sketchybarBracketID,
-				),
-				bracketItem.ToArgs(),
-			))
-
-			windowVisibility := item.getWindowVisibility(isFocusedWorkspace)
-			for _, windowID := range workspace.Windows {
-				window := tree.IndexedWindows[windowID]
-				if window == nil {
-					continue
-				}
-
-				sketchybarWindowID := getSketchybarWindowID(windowID)
-
-				windowItem := item.windowToSketchybar(
-					isFocusedWorkspace,
-					monitor.Monitor,
-					workspace.Workspace,
-					window.App,
-				)
-
-				windowItem.Width = windowVisibility.width
-				windowItem.Icon.Drawing = windowVisibility.show
-
-				batches = batch(batches, m(
-					s(
-						"--animate",
-						sketchybar.AnimationTanh,
-						settings.Sketchybar.Aerospace.TransitionTime,
-						"--set",
-						sketchybarWindowID,
-					),
-					windowItem.ToArgs(),
-				))
-			}
-		}
-	}
-
-	return batches
-}
-
 func (item *AerospaceItem) getSketchybarDisplayIndex(
 	monitorCount int,
 	monitorID aerospace.MonitorID,
@@ -743,57 +423,6 @@ func (item *AerospaceItem) getSketchybarDisplayIndex(
 		result = 1
 	}
 	return strconv.Itoa(result)
-}
-
-func (item *AerospaceItem) handleDisplayChange(batches Batches) Batches {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		item.logger.Error("Tree is nil during display change")
-		return batches
-	}
-
-	monitorCount := len(tree.Monitors)
-
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-
-			displayIndex := item.getSketchybarDisplayIndex(monitorCount, monitor.Monitor)
-			sketchybarWorkspaceID := getSketchybarWorkspaceID(workspace.Workspace)
-
-			workspaceItem := &sketchybar.ItemOptions{
-				Display: displayIndex,
-			}
-
-			batches = batch(batches, m(s("--set", sketchybarWorkspaceID), workspaceItem.ToArgs()))
-
-			for _, windowID := range workspace.Windows {
-				sketchybarWindowID := getSketchybarWindowID(windowID)
-
-				windowItem := &sketchybar.ItemOptions{
-					Display: displayIndex,
-				}
-
-				batches = batch(batches, m(s("--set", sketchybarWindowID), windowItem.ToArgs()))
-			}
-		}
-	}
-
-	focusedWorkspaceID := item.aerospace.GetFocusedWorkspaceID(context.Background())
-
-	for _, monitor := range tree.Monitors {
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; !ok {
-				continue
-			}
-			isFocused := workspace.Workspace == focusedWorkspaceID
-			batches = item.updateWorkspaceBracket(batches, workspace.Workspace, isFocused)
-		}
-	}
-
-	return batches
 }
 
 func (item *AerospaceItem) addWorkspaceBracket(
@@ -857,150 +486,6 @@ func (item *AerospaceItem) addWorkspaceSpacer(
 		"--set",
 		sketchybarSpacerID,
 	), workspaceSpacerItem.ToArgs()))
-
-	return batches
-}
-
-func (item *AerospaceItem) applyTree(
-	ctx context.Context,
-	batches Batches,
-	position sketchybar.Position,
-) (Batches, error) {
-	tree := item.aerospace.GetTree()
-	if tree == nil {
-		item.logger.Error("Tree is nil during applyTree")
-		return batches, errors.New("aerospace tree is nil")
-	}
-
-	focusedSpaceID := item.aerospace.GetFocusedWorkspaceID(ctx)
-
-	aerospaceSpacerItem := sketchybar.ItemOptions{
-		Width: pointer(*settings.Sketchybar.ItemSpacing * 2),
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "off",
-		},
-	}
-
-	sketchybarSpacerID := "aerospace.spacer"
-	batches = batch(batches, s(
-		"--add",
-		"item",
-		sketchybarSpacerID,
-		position,
-	))
-	batches = batch(batches, m(s(
-		"--set",
-		sketchybarSpacerID,
-	), aerospaceSpacerItem.ToArgs()))
-
-	var aggregatedErr error
-	for _, monitor := range tree.Monitors {
-		item.logger.DebugContext(ctx, "monitor", slog.Int("monitor", monitor.Monitor))
-
-		visibleWorkspaces := []*aerospace.WorkspaceWithWindowIDs{}
-		for _, workspace := range monitor.Workspaces {
-			if _, ok := icons.Workspace[workspace.Workspace]; ok {
-				visibleWorkspaces = append(visibleWorkspaces, workspace)
-			}
-		}
-
-		for i, workspace := range visibleWorkspaces {
-			isFocusedWorkspace := focusedSpaceID == workspace.Workspace
-
-			item.logger.DebugContext(
-				ctx,
-				"workspace",
-				slog.String("workspace", workspace.Workspace),
-				slog.Bool("focused", isFocusedWorkspace),
-			)
-
-			sketchybarSpaceID := getSketchybarWorkspaceID(workspace.Workspace)
-			workspaceSpace, err := item.workspaceToSketchybar(
-				isFocusedWorkspace,
-				len(tree.Monitors),
-				monitor.Monitor,
-				workspace.Workspace,
-			)
-			if err != nil {
-				aggregatedErr = errors.Join(aggregatedErr, err)
-				continue
-			}
-
-			batches = batch(batches, s("--add", "item", sketchybarSpaceID, position))
-			batches = batch(batches, m(s("--set", sketchybarSpaceID), workspaceSpace.ToArgs()))
-
-			sketchybarWindowIDs := make([]string, len(workspace.Windows))
-			for i, windowID := range workspace.Windows {
-				window := tree.IndexedWindows[windowID]
-				if window == nil {
-					item.logger.Warn("Window not found in tree during apply", slog.Int("windowID", windowID))
-					continue
-				}
-
-				item.logger.DebugContext(
-					ctx,
-					"window",
-					slog.Int("window", window.ID),
-					slog.String("app", window.App),
-				)
-
-				var sketchybarWindowID string
-				batches, sketchybarWindowID = item.addWindowToSketchybar(
-					batches,
-					position,
-					isFocusedWorkspace,
-					monitor.Monitor,
-					workspace.Workspace,
-					window.ID,
-					window.App,
-				)
-				sketchybarWindowIDs[i] = sketchybarWindowID
-			}
-
-			if len(workspace.Windows) > 0 {
-				batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
-			}
-
-			if i < len(visibleWorkspaces)-1 {
-				batches = item.addWorkspaceSpacer(batches, workspace.Workspace, position)
-			}
-		}
-	}
-
-	return batches, aggregatedErr
-}
-
-func (item *AerospaceItem) highlightWindows(
-	batches Batches,
-	workspaceID string,
-	app string,
-) Batches {
-	windowsOfFocusedWorkspace := item.aerospace.WindowsOfWorkspace(workspaceID)
-
-	for _, window := range windowsOfFocusedWorkspace {
-		windowItemID := getSketchybarWindowID(window.ID)
-
-		color := settings.Sketchybar.Aerospace.WindowColor
-		if utils.Equals(window.App, app) {
-			color = settings.Sketchybar.Aerospace.WindowFocusedColor
-		}
-
-		windowItem := sketchybar.ItemOptions{
-			Icon: sketchybar.ItemIconOptions{
-				Color: sketchybar.ColorOptions{
-					Color: color,
-				},
-			},
-		}
-
-		batches = batch(batches, m(s(
-			"--animate",
-			sketchybar.AnimationTanh,
-			settings.Sketchybar.Aerospace.TransitionTime,
-			"--set",
-			windowItemID,
-		), windowItem.ToArgs()))
-	}
 
 	return batches
 }

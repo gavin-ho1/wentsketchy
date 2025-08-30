@@ -8,12 +8,10 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/lucax88x/wentsketchy/cmd/cli/runner"
-	"github.com/lucax88x/wentsketchy/internal/jobs"
 	"github.com/lucax88x/wentsketchy/internal/wentsketchy"
 
 	"github.com/spf13/cobra"
@@ -156,7 +154,6 @@ func runJobs(
 
 	go func(ctx context.Context) {
 		// di.Config.Cfg
-		jobs.RefreshAerospaceData(ctx, di, time.Minute)
 	}(tickerCtx)
 
 	<-quit
