@@ -42,7 +42,7 @@ var Sketchybar = Settings{
 	BarBackgroundColor:  colors.Transparent,
 	BarHeight:           pointer(35),
 	BarMargin:           pointer(0),
-	BarTransitionTime:   "60",
+	BarTransitionTime:   "0",
 	ItemHeight:          pointer(25),
 	ItemSpacing:         pointer(2),
 	ItemRadius:          pointer(45),
@@ -66,7 +66,7 @@ var Sketchybar = Settings{
 		WorkspaceFocusedColor:           colors.Black1,
 		WindowColor:                     colors.WhiteA40,
 		WindowFocusedColor:              colors.White,
-		TransitionTime:                  "1",
+		TransitionTime:                  "5",
 	},
 }
 

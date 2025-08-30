@@ -32,6 +32,7 @@ type AerospaceItem struct {
 	pollMutex    sync.Mutex
 	lastPollTime time.Time
 	isPolling    bool
+	isAnimating  bool
 }
 
 const (
@@ -39,87 +40,20 @@ const (
 	pollDebounce = 10 * time.Millisecond
 )
 
-func (item *AerospaceItem) startDelayedPoll(ctx context.Context) {
-	item.pollMutex.Lock()
-	defer item.pollMutex.Unlock()
-
-	if item.pollTimer != nil {
-		item.pollTimer.Stop()
-	}
-
-	if time.Since(item.lastPollTime) < pollDebounce {
-		return
-	}
-
-	item.pollTimer = time.AfterFunc(pollDelay, func() {
-		item.pollMutex.Lock()
-		defer item.pollMutex.Unlock()
-
-		if item.isPolling {
-			return
-		}
-
-		item.isPolling = true
-		item.lastPollTime = time.Now()
-
-		go func() {
-			defer func() {
-				item.pollMutex.Lock()
-				item.isPolling = false
-				item.pollMutex.Unlock()
-			}()
-
-			item.logger.Debug("Starting delayed poll for aerospace sync")
-
-			syntheticArgs := &args.In{
-				Name:  AerospaceName,
-				Event: events.SpaceWindowsChange,
-				Info:  "",
-			}
-
-			if callback := item.syncCallback; callback != nil {
-				callback(ctx, syntheticArgs)
-			}
-		}()
-	})
-}
-
-func (item *AerospaceItem) handleSyncCallback(ctx context.Context, args *args.In) {
-	batches := make(Batches, 0)
-	batches, err := item.Update(ctx, batches, item.position, args)
-	if err != nil {
-		item.logger.ErrorContext(ctx, "syncCallback: error updating item", slog.Any("err", err))
-		return
-	}
-
-	err = item.sketchybar.Run(ctx, Flatten(batches...))
-	if err != nil {
-		item.logger.ErrorContext(ctx, "syncCallback: error running sketchybar", slog.Any("err", err))
-	}
-}
-
-func (item *AerospaceItem) performSyncCheck(ctx context.Context, batches Batches) (Batches, error) {
-	item.logger.Debug("Performing sync check")
-	item.aerospace.SingleFlightRefreshTree()
-	return item.CheckTree(ctx, batches)
-}
-
 func NewAerospaceItem(
 	logger *slog.Logger,
 	aerospace aerospace.Aerospace,
 	sketchybarAPI sketchybar.API,
 ) *AerospaceItem {
 	item := &AerospaceItem{
-		logger:       logger,
-		aerospace:    aerospace,
-		sketchybar:   sketchybarAPI,
-		position:     sketchybar.PositionLeft,
-		windowIDs:    make(map[int]string, 0),
-		pollMutex:    sync.Mutex{},
-		lastPollTime: time.Time{},
-		isPolling:    false,
+		logger:      logger,
+		aerospace:   aerospace,
+		sketchybar:  sketchybarAPI,
+		position:    sketchybar.PositionLeft,
+		windowIDs:   make(map[int]string, 0),
+		isPolling:   false,
+		isAnimating: false,
 	}
-	item.syncCallback = item.handleSyncCallback
 	return item
 }
 
@@ -175,15 +109,10 @@ func (item *AerospaceItem) Update(
 		batches = item.handleWorkspaceChange(ctx, batches, data.Prev, data.Focused)
 	case events.SpaceWindowsChange:
 		batches, err = item.CheckTree(ctx, batches)
-		if err == nil {
-			item.startDelayedPoll(ctx)
-		}
 	case events.DisplayChange:
 		batches = item.handleDisplayChange(batches)
-		item.startDelayedPoll(ctx)
 	case events.FrontAppSwitched:
 		batches = item.handleFrontAppSwitched(ctx, batches, args.Info)
-		item.startDelayedPoll(ctx)
 	}
 
 	return batches, err
@@ -240,6 +169,10 @@ func (item *AerospaceItem) CheckTree(
 	ctx context.Context,
 	batches Batches,
 ) (Batches, error) {
+	if item.isAnimating {
+		item.logger.Info("animation in progress, skipping check tree")
+		return batches, nil
+	}
 	item.logger.Info("Checking aerospace tree for updates")
 	item.aerospace.SingleFlightRefreshTree()
 	tree := item.aerospace.GetTree()
@@ -638,6 +571,16 @@ func (item *AerospaceItem) handleWorkspaceChange(
 	prevWorkspaceID string,
 	focusedWorkspaceID string,
 ) Batches {
+	item.isAnimating = true
+	go func() {
+		transitionTime, err := strconv.Atoi(settings.Sketchybar.Aerospace.TransitionTime)
+		if err != nil {
+			transitionTime = 1
+		}
+		time.Sleep(time.Duration(transitionTime) * time.Second)
+		item.isAnimating = false
+	}()
+
 	item.aerospace.SingleFlightRefreshTree()
 	tree := item.aerospace.GetTree()
 
@@ -783,8 +726,6 @@ func (item *AerospaceItem) handleWorkspaceChange(
 			}
 		}
 	}
-
-	item.startDelayedPoll(ctx)
 
 	return batches
 }
