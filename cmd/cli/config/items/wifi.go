@@ -112,33 +112,34 @@ func (i WifiItem) Update(
 			// Wi-Fi is on, now try to get the SSID using system_profiler (non-sudo)
 			color = colors.White // Default color if Wi-Fi is on (before knowing connection status)
 
-			// --- NON-SUDO IMPLEMENTATION: Use system_profiler with corrected awk parsing ---
-			// This command should not require sudo and reliably gets the SSID.
-			// It looks for "Current Network Information:", then reads the next line,
-			// removes the trailing colon, and prints the result.
-			ssidCommand := `system_profiler SPAirPortDataType | awk '/Current Network Information:/ {getline; sub(/:$/,""); print $0; exit}'`
-
-			ssidOutput, cmdErr := i.command.Run(ctx, "sh", "-c", ssidCommand)
+			// --- Use networksetup for faster SSID retrieval ---
+			ssidOutput, cmdErr := i.command.Run(ctx, "networksetup", "-getairportnetwork", "en0")
 
 			if cmdErr != nil {
-				// Error running system_profiler
-				i.logger.Error("could not get ssid from system_profiler", "error", cmdErr, "raw_output", ssidOutput)
+				// Error running networksetup
+				i.logger.Error("could not get ssid from networksetup", "error", cmdErr, "raw_output", ssidOutput)
 				label = "On" // Indicate Wi-Fi is on, but we couldn't get the SSID
 				color = colors.Yellow // Suggests a warning/unknown state for connection
 			} else {
-				ssid := strings.TrimSpace(ssidOutput)
-				if ssid != "" {
-					// SSID successfully retrieved
-					label = ssid
-					color = colors.Green // Connected color
+				if strings.Contains(ssidOutput, "Current Wi-Fi Network: ") {
+					parts := strings.SplitN(ssidOutput, ": ", 2)
+					if len(parts) > 1 {
+						ssid := strings.TrimSpace(parts[1])
+						label = ssid
+						color = colors.Green // Connected color
+					} else {
+						// This case should ideally not be reached if the string contains the prefix
+						label = "On"
+						color = colors.White
+					}
 				} else {
-					// No SSID found in system_profiler output (e.g., not connected to any network)
-					i.logger.Debug("not connected to a network, or SSID not found in system_profiler output", "output", ssidOutput)
+					// Not connected to any network
+					i.logger.Debug("not connected to a network", "output", ssidOutput)
 					label = "On" // Wi-Fi is on, but no network associated
 					color = colors.White // Default color for on but not connected
 				}
 			}
-			// --- END NON-SUDO IMPLEMENTATION ---
+			// --- END networksetup IMPLEMENTATION ---
 		}
 
 		// Update sketchybar item with determined icon, label, and color
