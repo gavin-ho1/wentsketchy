@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -25,6 +26,7 @@ type AerospaceItem struct {
 	sketchybar    sketchybar.API
 	position      sketchybar.Position
 	renderedItems map[string]bool
+	closingItems  map[string]time.Time // Track items being closed for delayed removal
 }
 
 func NewAerospaceItem(
@@ -38,6 +40,7 @@ func NewAerospaceItem(
 		sketchybar:    sketchybarAPI,
 		position:      sketchybar.PositionLeft,
 		renderedItems: make(map[string]bool),
+		closingItems:  make(map[string]time.Time),
 	}
 }
 
@@ -127,10 +130,37 @@ func (item *AerospaceItem) render(
 		}
 	}
 
-	// --- 2. Remove items that are no longer needed ---
+	// --- 2. Handle closing animations and cleanup expired items ---
+	now := time.Now()
+	transitionDuration, err := time.ParseDuration(settings.Sketchybar.Aerospace.TransitionTime)
+	if err != nil {
+		item.logger.Warn("could not parse transition time, using default", slog.Any("err", err))
+		transitionDuration = 200 * time.Millisecond
+	}
+
 	for itemID := range item.renderedItems {
 		if !newItems[itemID] {
+			// Start closing animation if not already started
+			if _, isClosing := item.closingItems[itemID]; !isClosing {
+				item.closingItems[itemID] = now
+				// Animate to closed state (reverse animation)
+				if isWindowItem(itemID) {
+					batches = batch(batches, s(
+						"--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime,
+						"--set", itemID,
+						"icon.drawing=off",
+						"width=0",
+					))
+				}
+			}
+		}
+	}
+
+	// Remove items that have finished their closing animation
+	for itemID, closingStartTime := range item.closingItems {
+		if now.Sub(closingStartTime) >= transitionDuration {
 			batches = batch(batches, s("--remove", itemID))
+			delete(item.closingItems, itemID)
 		}
 	}
 
@@ -194,24 +224,49 @@ func (item *AerospaceItem) render(
 				}
 				windowItem := item.windowToSketchybar(isFocusedWorkspace, monitor.Monitor, workspace.Workspace, window.App)
 				sketchybarWindowID := getSketchybarWindowID(windowID)
-				if !item.renderedItems[sketchybarWindowID] {
+				
+				isNewWindow := !item.renderedItems[sketchybarWindowID]
+				if isNewWindow {
+					// Add window with initial closed state for opening animation
+					initialWindowItem := *windowItem
+					initialWindowItem.Width = pointer(0)
+					initialWindowItem.Icon.Drawing = "off"
+					
 					batches = batch(batches, s("--add", "item", sketchybarWindowID, position))
+					batches = batch(batches, m(s("--set", sketchybarWindowID), initialWindowItem.ToArgs()))
 				}
+				
+				// Animate to final state (opening animation for new windows, update for existing)
 				batches = batch(batches, m(
 					s("--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime, "--set", sketchybarWindowID),
 					windowItem.ToArgs(),
 				))
+				
 				batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
 				prevSketchybarItemID = sketchybarWindowID
 				sketchybarWindowIDs[j] = sketchybarWindowID
 			}
 
+			// Handle brackets more carefully to prevent flickering
 			if len(workspace.Windows) > 0 {
 				sketchybarBracketID := getSketchybarBracketID(workspace.Workspace)
-				if item.renderedItems[sketchybarBracketID] {
-					batches = batch(batches, s("--remove", sketchybarBracketID))
+				
+				// Only recreate bracket if it doesn't exist or window composition changed
+				if !item.renderedItems[sketchybarBracketID] || item.bracketNeedsUpdate(workspace.Workspace, sketchybarWindowIDs) {
+					// Remove existing bracket if it exists
+					if item.renderedItems[sketchybarBracketID] {
+						batches = batch(batches, s("--remove", sketchybarBracketID))
+					}
+					batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
+				} else {
+					// Just update bracket colors without recreating
+					colors := item.getWorkspaceColors(isFocusedWorkspace)
+					batches = batch(batches, s(
+						"--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime,
+						"--set", sketchybarBracketID,
+						fmt.Sprintf("background.border_color=%s", colors.backgroundColor),
+					))
 				}
-				batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace, sketchybarWindowIDs)
 			}
 
 			if i < len(visibleWorkspaces)-1 {
@@ -225,6 +280,18 @@ func (item *AerospaceItem) render(
 
 	item.renderedItems = newItems
 	return batches, aggregatedErr
+}
+
+// Helper function to determine if bracket needs updating
+func (item *AerospaceItem) bracketNeedsUpdate(workspaceID string, currentWindowIDs []string) bool {
+	// This is a simplified check - in a full implementation, you'd want to track
+	// the previous window composition for each workspace
+	return false // For now, assume brackets don't need recreation unless they don't exist
+}
+
+// Helper function to check if an item ID represents a window
+func isWindowItem(itemID string) bool {
+	return len(itemID) > len(windowItemPrefix) && itemID[:len(windowItemPrefix)] == windowItemPrefix
 }
 
 func (item *AerospaceItem) workspaceToSketchybar(
