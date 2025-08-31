@@ -132,12 +132,13 @@ func (item *AerospaceItem) render(
 
 	// --- 2. Handle closing animations and cleanup expired items ---
 	now := time.Now()
-	transitionDuration, err := time.ParseDuration(settings.Sketchybar.Aerospace.TransitionTime)
+	transitionTimeMs, err := strconv.Atoi(settings.Sketchybar.Aerospace.TransitionTime)
 	if err != nil {
-		item.logger.Warn("could not parse transition time, using default", slog.Any("err", err))
-		transitionDuration = 200 * time.Millisecond
+		item.logger.Error("could not parse TransitionTime, using default", slog.Any("error", err))
+		transitionTimeMs = 5
 	}
-
+	transitionDuration := time.Duration(transitionTimeMs) * time.Millisecond
+	
 	for itemID := range item.renderedItems {
 		if !newItems[itemID] {
 			// Start closing animation if not already started
@@ -216,7 +217,8 @@ func (item *AerospaceItem) render(
 			))
 
 			sketchybarWindowIDs := make([]string, len(workspace.Windows))
-			prevSketchybarItemID := sketchybarSpaceID // Start positioning after the workspace icon
+			
+			// First pass: Add all windows and determine positioning
 			for j, windowID := range workspace.Windows {
 				window := tree.IndexedWindows[windowID]
 				if window == nil {
@@ -236,15 +238,45 @@ func (item *AerospaceItem) render(
 					batches = batch(batches, m(s("--set", sketchybarWindowID), initialWindowItem.ToArgs()))
 				}
 				
+				sketchybarWindowIDs[j] = sketchybarWindowID
+			}
+			
+			// Second pass: Position windows and animate
+			prevSketchybarItemID := sketchybarSpaceID // Start positioning after the workspace icon
+			for _, windowID := range workspace.Windows {
+				window := tree.IndexedWindows[windowID]
+				if window == nil {
+					continue
+				}
+				windowItem := item.windowToSketchybar(isFocusedWorkspace, monitor.Monitor, workspace.Workspace, window.App)
+				sketchybarWindowID := getSketchybarWindowID(windowID)
+				
+				isNewWindow := !item.renderedItems[sketchybarWindowID]
+				
+				// Position window
+				batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
+				
+				if isNewWindow {
+					// For new windows, position after the rightmost existing window first, then animate
+					// Find the rightmost existing window in this workspace
+					rightmostExisting := sketchybarSpaceID
+					for k := len(workspace.Windows) - 1; k >= 0; k-- {
+						checkWindowID := getSketchybarWindowID(workspace.Windows[k])
+						if item.renderedItems[checkWindowID] && checkWindowID != sketchybarWindowID {
+							rightmostExisting = checkWindowID
+							break
+						}
+					}
+					batches = batch(batches, s("--move", sketchybarWindowID, "after", rightmostExisting))
+				}
+				
 				// Animate to final state (opening animation for new windows, update for existing)
 				batches = batch(batches, m(
 					s("--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime, "--set", sketchybarWindowID),
 					windowItem.ToArgs(),
 				))
 				
-				batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
 				prevSketchybarItemID = sketchybarWindowID
-				sketchybarWindowIDs[j] = sketchybarWindowID
 			}
 
 			// Handle brackets more carefully to prevent flickering
