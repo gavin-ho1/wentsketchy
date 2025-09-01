@@ -75,6 +75,27 @@ func (f FifoServer) handle(
 		return
 	}
 
+	if strings.HasPrefix(msg, events.AerospaceRefresh) {
+		f.logger.InfoContext(
+			ctx,
+			"server: react",
+			slog.String("event", events.AerospaceRefresh),
+		)
+
+		f.aerospace.SingleFlightRefreshTree()
+
+		err := f.config.Update(ctx, &args.In{
+			Name:  items.AerospaceName,
+			Event: events.AerospaceRefresh,
+		})
+
+		if err != nil {
+			f.logger.ErrorContext(ctx, "server: could not handle update", slog.Any("err", err))
+		}
+
+		return
+	}
+
 	if strings.HasPrefix(msg, "update") {
 		args, err := args.FromEvent(msg)
 

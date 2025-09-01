@@ -91,6 +91,8 @@ func (item *AerospaceItem) Update(
 		item.aerospace.SetFocusedWorkspaceID(data.Focused)
 	case events.FrontAppSwitched:
 		item.aerospace.SetFocusedApp(args.Info)
+	case aerospace_events.AerospaceRefresh:
+		// No data to parse, just re-render
 	}
 
 	return item.render(ctx, batches, position)

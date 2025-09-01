@@ -115,6 +115,8 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 	bluetoothJob.Start(ctx)
 	wifiJob := items.NewWifiJob(di.Logger, di.command, di.Sketchybar)
 	wifiJob.Start(ctx)
+	aerospaceJob := items.NewAerospaceJob(di.Logger, di.Config)
+	aerospaceJob.Start(ctx)
 
 	return nil
 }
