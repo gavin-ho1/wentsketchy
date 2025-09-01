@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
@@ -29,7 +28,6 @@ type AerospaceItem struct {
 	renderedItems       map[string]bool
 	closingItems        map[string]time.Time // Track items being closed for delayed removal
 	workspaceWindowIDs  map[string][]string  // Track window IDs for each workspace
-	pendingBracketUpdates map[string][]string // Track brackets that need updating after animations
 	bracketStates       map[string]string    // Track bracket creation state to prevent duplicates
 }
 
@@ -46,7 +44,6 @@ func NewAerospaceItem(
 		renderedItems:         make(map[string]bool),
 		closingItems:          make(map[string]time.Time),
 		workspaceWindowIDs:    make(map[string][]string),
-		pendingBracketUpdates: make(map[string][]string),
 		bracketStates:         make(map[string]string),
 	}
 }
@@ -55,6 +52,7 @@ const aerospaceCheckerItemName = "aerospace.checker"
 const workspaceItemPrefix = "aerospace.workspace"
 const windowItemPrefix = "aerospace.window"
 const bracketItemPrefix = "aerospace.bracket"
+const bracketSpacerItemPrefix = "aerospace.bracket.spacer"
 const spacerItemPrefix = "aerospace.spacer"
 
 const AerospaceName = aerospaceCheckerItemName
@@ -127,11 +125,10 @@ func (item *AerospaceItem) render(
 
 		for i, workspace := range visibleWorkspaces {
 			newItems[getSketchybarWorkspaceID(workspace.Workspace)] = true
+			newItems[getSketchybarBracketID(workspace.Workspace)] = true
+			newItems[getSketchybarBracketSpacerID(workspace.Workspace)] = true
 			for _, windowID := range workspace.Windows {
 				newItems[getSketchybarWindowID(windowID)] = true
-			}
-			if len(workspace.Windows) > 0 {
-				newItems[getSketchybarBracketID(workspace.Workspace)] = true
 			}
 			if i < len(visibleWorkspaces)-1 {
 				newItems[getSketchybarSpacerID(workspace.Workspace)] = true
@@ -280,16 +277,9 @@ func (item *AerospaceItem) render(
 				windowItem := item.windowToSketchybar(isFocusedWorkspace, monitor.Monitor, workspace.Workspace, window.App)
 				sketchybarWindowID := getSketchybarWindowID(windowID)
 				
-				isNewWindow := !item.renderedItems[sketchybarWindowID]
-				
 				// Position window
 				batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
-				
-				if isNewWindow {
-					// For new windows, ensure proper positioning before animation
-					batches = batch(batches, s("--move", sketchybarWindowID, "after", prevSketchybarItemID))
-				}
-				
+
 				// Animate to final state (opening animation for new windows, update for existing)
 				batches = batch(batches, m(
 					s("--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime, "--set", sketchybarWindowID),
@@ -299,11 +289,22 @@ func (item *AerospaceItem) render(
 				prevSketchybarItemID = sketchybarWindowID
 			}
 
-			// Handle brackets with improved logic to prevent glitches
-			if len(workspace.Windows) > 0 {
-				batches = item.handleWorkspaceBracket(batches, workspace, sketchybarWindowIDs, isFocusedWorkspace, transitionDuration, now)
-			} else {
-				// Clear tracking and remove bracket when no windows
+			// Add spacer and bracket if they don't exist
+			bracketSpacerID := getSketchybarBracketSpacerID(workspace.Workspace)
+			if !item.renderedItems[bracketSpacerID] {
+				batches = item.addBracketSpacer(batches, workspace.Workspace, position)
+			}
+			sketchybarBracketID := getSketchybarBracketID(workspace.Workspace)
+			if !item.renderedItems[sketchybarBracketID] {
+				// This is a new workspace, create the bracket for the first time.
+				batches = item.addWorkspaceBracket(batches, isFocusedWorkspace, workspace.Workspace)
+			}
+
+			// Now, handle the bracket state (color, visibility)
+			batches = item.handleWorkspaceBracket(batches, workspace, sketchybarWindowIDs, isFocusedWorkspace, transitionDuration, now)
+
+			if len(workspace.Windows) == 0 {
+				// if there are no windows, we still need to clean up the internal state tracking
 				item.cleanupWorkspaceBracket(workspace.Workspace)
 			}
 
@@ -315,9 +316,6 @@ func (item *AerospaceItem) render(
 			}
 		}
 	}
-
-	// --- 4. Process pending bracket updates with better timing ---
-	batches = item.processPendingBracketUpdates(batches, focusedWorkspaceID, transitionDuration, now, tree)
 
 	item.renderedItems = newItems
 	return batches, aggregatedErr
@@ -333,138 +331,30 @@ func (item *AerospaceItem) handleWorkspaceBracket(
 	now time.Time,
 ) Batches {
 	sketchybarBracketID := getSketchybarBracketID(workspace.Workspace)
-	
-	// Check if we need to update the bracket
-	needsUpdate := !item.renderedItems[sketchybarBracketID] || item.bracketNeedsUpdate(workspace.Workspace, sketchybarWindowIDs)
-	
-	if !needsUpdate {
-		// Just update bracket colors without recreating
-		colors := item.getWorkspaceColors(isFocusedWorkspace)
-		if item.renderedItems[sketchybarBracketID] {
-			batches = batch(batches, s(
-				"--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime,
-				"--set", sketchybarBracketID,
-				fmt.Sprintf("background.border_color=%s", colors.backgroundColor),
-			))
-		}
-		return batches
-	}
-	
-	// Check if any windows are currently animating
-	hasAnimatingWindows := item.hasAnimatingWindows(workspace.Workspace, sketchybarWindowIDs, now, transitionDuration)
-	
-	if hasAnimatingWindows {
-		// Defer bracket update until animations complete
-		item.pendingBracketUpdates[workspace.Workspace] = sketchybarWindowIDs
-		item.logger.Debug("Deferring bracket update due to animations", slog.String("workspace", workspace.Workspace))
-	} else {
-		// Safe to update bracket immediately
-		batches = item.updateWorkspaceBracket(batches, workspace.Workspace, sketchybarWindowIDs, isFocusedWorkspace)
-	}
-	
-	return batches
-}
+	colors := item.getWorkspaceColors(isFocusedWorkspace)
 
-// Check if workspace has any animating windows
-func (item *AerospaceItem) hasAnimatingWindows(workspaceID string, currentWindowIDs []string, now time.Time, transitionDuration time.Duration) bool {
-	// Check for opening animations (new windows)
-	for _, windowID := range currentWindowIDs {
-		if !item.renderedItems[windowID] {
-			return true
-		}
+	borderColor := colors.backgroundColor
+	if len(workspace.Windows) == 0 {
+		borderColor = colorsPkg.Transparent
 	}
-	
-	// Check for closing animations in this workspace
-	for closingItemID, closingStartTime := range item.closingItems {
-		if isWindowItem(closingItemID) && belongsToWorkspace(closingItemID, workspaceID) {
-			if now.Sub(closingStartTime) < transitionDuration {
-				return true
-			}
-		}
-	}
-	
-	return false
-}
 
-// Update workspace bracket with improved error handling
-func (item *AerospaceItem) updateWorkspaceBracket(batches Batches, workspaceID string, windowIDs []string, isFocused bool) Batches {
-	sketchybarBracketID := getSketchybarBracketID(workspaceID)
-	
-	// Always remove existing bracket first to prevent conflicts
-	if item.renderedItems[sketchybarBracketID] {
-		batches = batch(batches, s("--remove", sketchybarBracketID))
-		item.logger.Debug("Removed existing bracket", slog.String("bracketID", sketchybarBracketID))
-	}
-	
-	// Clear any stale state
-	delete(item.bracketStates, workspaceID)
-	delete(item.pendingBracketUpdates, workspaceID)
-	
-	// Add new bracket
-	batches = item.addWorkspaceBracket(batches, isFocused, workspaceID, windowIDs)
-	item.workspaceWindowIDs[workspaceID] = windowIDs
-	
-	// Track bracket state
-	bracketsKey := strings.Join(windowIDs, ",")
-	item.bracketStates[workspaceID] = bracketsKey
-	
-	item.logger.Debug("Updated workspace bracket", 
-		slog.String("workspace", workspaceID),
-		slog.Int("windowCount", len(windowIDs)))
-	
-	return batches
-}
+	// Always animate the color to handle visibility and focus changes
+	batches = batch(batches, s(
+		"--animate", sketchybar.AnimationTanh, settings.Sketchybar.Aerospace.TransitionTime,
+		"--set", sketchybarBracketID,
+		fmt.Sprintf("background.border_color=%s", borderColor),
+	))
 
-// Process pending bracket updates with improved timing
-func (item *AerospaceItem) processPendingBracketUpdates(
-	batches Batches,
-	focusedWorkspaceID string,
-	transitionDuration time.Duration,
-	now time.Time,
-	tree *aerospace.Tree,
-) Batches {
-	for workspaceID, windowIDs := range item.pendingBracketUpdates {
-		// Check if all animations for this workspace have completed
-		if !item.hasAnimatingWindows(workspaceID, windowIDs, now, transitionDuration) {
-			// All animations complete, safe to update bracket
-			isFocused := focusedWorkspaceID == workspaceID
-			batches = item.updateWorkspaceBracket(batches, workspaceID, windowIDs, isFocused)
-			
-			item.logger.Debug("Processed pending bracket update", slog.String("workspace", workspaceID))
-		}
-	}
-	
+	// Update the internal state for the next render cycle.
+	item.workspaceWindowIDs[workspace.Workspace] = sketchybarWindowIDs
+
 	return batches
 }
 
 // Clean up workspace bracket state
 func (item *AerospaceItem) cleanupWorkspaceBracket(workspaceID string) {
 	delete(item.workspaceWindowIDs, workspaceID)
-	delete(item.pendingBracketUpdates, workspaceID)
 	delete(item.bracketStates, workspaceID)
-}
-
-// Helper function to determine if bracket needs updating
-func (item *AerospaceItem) bracketNeedsUpdate(workspaceID string, currentWindowIDs []string) bool {
-	previousWindowIDs, exists := item.workspaceWindowIDs[workspaceID]
-	if !exists {
-		// No previous state, needs update if we have windows
-		return len(currentWindowIDs) > 0
-	}
-
-	// Check if the window composition has changed
-	if len(previousWindowIDs) != len(currentWindowIDs) {
-		return true
-	}
-
-	// Check if the actual window IDs have changed (order matters for brackets)
-	for i, windowID := range currentWindowIDs {
-		if i >= len(previousWindowIDs) || windowID != previousWindowIDs[i] {
-			return true
-		}
-	}
-
-	return false
 }
 
 // Helper function to check if an item ID represents a window
@@ -598,6 +488,10 @@ func getSketchybarBracketID(spaceID aerospace.WorkspaceID) string {
 	return fmt.Sprintf("%s.%s", bracketItemPrefix, spaceID)
 }
 
+func getSketchybarBracketSpacerID(spaceID aerospace.WorkspaceID) string {
+	return fmt.Sprintf("%s.%s", bracketSpacerItemPrefix, spaceID)
+}
+
 func getSketchybarSpacerID(spaceID aerospace.WorkspaceID) string {
 	return fmt.Sprintf("%s.%s", spacerItemPrefix, spaceID)
 }
@@ -695,7 +589,6 @@ func (item *AerospaceItem) addWorkspaceBracket(
 	batches Batches,
 	isFocusedWorkspace bool,
 	workspaceID string,
-	sketchybarWindowIDs []string,
 ) Batches {
 	colors := item.getWorkspaceColors(isFocusedWorkspace)
 	workspaceBracketItem := sketchybar.BracketOptions{
@@ -712,31 +605,22 @@ func (item *AerospaceItem) addWorkspaceBracket(
 
 	sketchybarSpaceID := getSketchybarWorkspaceID(workspaceID)
 	sketchybarBracketID := getSketchybarBracketID(workspaceID)
+	bracketSpacerID := getSketchybarBracketSpacerID(workspaceID)
 
-	// Ensure we have valid window IDs and they're properly positioned
-	validWindowIDs := []string{}
-	for _, windowID := range sketchybarWindowIDs {
-		if windowID != "" {
-			validWindowIDs = append(validWindowIDs, windowID)
-		}
-	}
+	// The bracket is defined by the workspace icon and the spacer.
+	// Windows will be moved between these two items.
+	itemsForBracket := []string{sketchybarSpaceID, bracketSpacerID}
 
-	if len(validWindowIDs) == 0 {
-		item.logger.Warn("No valid window IDs for bracket", slog.String("workspace", workspaceID))
-		return batches
-	}
-
-	item.logger.Debug("Adding workspace bracket", 
+	item.logger.Debug("Adding workspace bracket",
 		slog.String("workspace", workspaceID),
 		slog.String("bracketID", sketchybarBracketID),
-		slog.Any("windowIDs", validWindowIDs))
+		slog.Any("items", itemsForBracket))
 
 	batches = batch(batches, m(s(
 		"--add",
 		"bracket",
-		sketchybarBracketID,
-		sketchybarSpaceID),
-		validWindowIDs,
+		sketchybarBracketID),
+		itemsForBracket,
 	))
 
 	batches = batch(batches, m(s(
@@ -771,7 +655,34 @@ func (item *AerospaceItem) addWorkspaceSpacer(
 		sketchybarSpacerID,
 	), workspaceSpacerItem.ToArgs()))
 
-	return batches                                         
+	return batches
+}
+
+func (item *AerospaceItem) addBracketSpacer(
+	batches Batches,
+	workspaceID string,
+	position sketchybar.Position,
+) Batches {
+	bracketSpacerItem := sketchybar.ItemOptions{
+		Width: pointer(0), // Initially zero width
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "off",
+		},
+	}
+
+	sketchybarSpacerID := getSketchybarBracketSpacerID(workspaceID)
+	batches = batch(batches, s(
+		"--add",
+		"item",
+		sketchybarSpacerID,
+		position,
+	))
+	batches = batch(batches, m(s(
+		"--set",
+		sketchybarSpacerID,
+	), bracketSpacerItem.ToArgs()))
+
+	return batches
 }
 
 func isAerospace(name string) bool {
