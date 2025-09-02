@@ -4,9 +4,9 @@ It provides a repo with building blocks for all the plugins to build complex set
 It supports handling between complex programs, such as aerospace, and yabai.
 
 demo:
-<video src="https://github.com/user-attachments/assets/ed7a5e2f-82e8-452b-9eb4-44dabb859542" controls width="600">
+<video src="https://github.com/user-attachments/assets/185e16bf-2dc2-411b-b78c-1147ddfd5474" controls width="600">
   Your browser does not support the video tag. You can watch the video here: 
-  https://github.com/user-attachments/assets/ed7a5e2f-82e8-452b-9eb4-44dabb859542
+    https://github.com/user-attachments/assets/185e16bf-2dc2-411b-b78c-1147ddfd5474542
 </video>
 
 today, it supports:
