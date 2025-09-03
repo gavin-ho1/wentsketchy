@@ -44,8 +44,15 @@ then use this .sketchybarrc to test
 
 ```shell
 #!/bin/bash
+while true; do
+    $HOME/bin/wentsketchy start
+    echo "Binary crashed with exit code $? — restarting in 2s..."
+    sleep 2
+done
+#the wentsketchy binary seems to crash or stall sometimes, and I'm not sure why. This ensures that wentsketchy is constantly running. 
+#I'm sure there's a better way to do this, but this works for now.
+#If anyone can figure out why it crashes and a better fix, it would be appreciated.
 
-"$HOME/bin/wentsketchy" start
 ```
 
 and this in .aerospace.toml to test
