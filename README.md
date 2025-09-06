@@ -44,11 +44,11 @@ then use this .sketchybarrc to test
 
 ```shell
 #!/bin/bash
-while true; do
-    $HOME/bin/wentsketchy start
-    echo "Binary crashed with exit code $? — restarting in 2s..."
-    sleep 2
-done
+
+#Ensure blueutil can be used in this terminal session
+export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
+
+"$HOME/bin/wentsketchy" start
 ```
 
 and this in .aerospace.toml to test
@@ -81,24 +81,6 @@ right:
   - battery
   - calendar
 ```
-
-Please note that starting wentsketchy from `.sketchybarrc` will not work on startup if you use brew services to run sketchybar, and will sporadically stall/quit. Follow the steps below to allow wentsketchy to run persistently and work with brew.
-
-## To make the wentsketchy process run persisently:
-
-Change `YOUR_USERNAME` in the `.plist` file to your username:
-
-```shell
-<string>/Users/YOUR_USERNAME/bin/wentsketchy</string>
-```
-
-Then run:
-```
-cp com.user.wentsketchy.plist ~/Library/LaunchAgents/
-launchctl load com.user.wentsketchy.plist
-```
-
-This should allow wentsketchy to run persistently.
 
 ## My Personal Changes
 
