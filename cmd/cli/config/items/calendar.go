@@ -36,7 +36,7 @@ func (i CalendarItem) Init(
 	
 	// Use a simple shell script that updates the time directly
 	updateScript := `#!/bin/bash
-TIME=$(date "+%b %d %H:%M")
+TIME=$(date "+%b %e %I:%M %p" | sed -e 's/  / /g' -e 's/\b0\([1-9]\):/\1:/g')
 sketchybar --set "$NAME" label="$TIME"`
 
 	calendarItem := sketchybar.ItemOptions{
@@ -91,7 +91,7 @@ func (i CalendarItem) Update(
 	if args.Event == events.SystemWoke {
 		// Update time on system wake
 		now := time.Now()
-		formattedTime := now.Format("Jan 02 15:04")
+		formattedTime := now.Format("Jan 2 3:04 PM")
 
 		calendarItem := sketchybar.ItemOptions{
 			Label: sketchybar.ItemLabelOptions{
