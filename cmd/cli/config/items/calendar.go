@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"time"
+	"fmt"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -36,7 +37,7 @@ func (i CalendarItem) Init(
 	
 	// Use a simple shell script that updates the time directly
 	updateScript := `#!/bin/bash
-TIME=$(date "+%b %e %I:%M %p" | sed -e 's/  / /g' -e 's/\b0\([1-9]\):/\1:/g')
+TIME=$(date "+%b %e %l:%M %p" | sed -e 's/  / /g')
 sketchybar --set "$NAME" label="$TIME"`
 
 	calendarItem := sketchybar.ItemOptions{
@@ -59,7 +60,7 @@ sketchybar --set "$NAME" label="$TIME"`
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(60), // Update every minute
+		UpdateFreq: pointer(1), // Update every minute
 		Updates:    "on",
 		Script:     updateScript, // Use inline script for time updates
 	}
@@ -89,18 +90,21 @@ func (i CalendarItem) Update(
 	}
 
 	if args.Event == events.SystemWoke {
-		// Update time on system wake
 		now := time.Now()
-		formattedTime := now.Format("Jan 2 3:04 PM")
-
+		hour := now.Hour() % 12
+		if hour == 0 {
+			hour = 12
+		}
+		formattedTime := fmt.Sprintf("%s %d:%02d %s", now.Format("Jan 2"), hour, now.Minute(), now.Format("PM"))
+	
 		calendarItem := sketchybar.ItemOptions{
 			Label: sketchybar.ItemLabelOptions{
 				Value: formattedTime,
 			},
 		}
-
+	
 		batches = batch(batches, m(s("--set", calendarItemName), calendarItem.ToArgs()))
-	}
+	}	
 
 	return batches, nil
 }
