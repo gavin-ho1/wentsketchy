@@ -42,7 +42,7 @@ func (cfg *Config) Init(ctx context.Context) error {
 		return fmt.Errorf("config: defaults %w", err)
 	}
 
-	batches, err = items.Bar(batches)
+	batches, err = items.Bar(cfg.logger, batches)
 
 	if err != nil {
 		return fmt.Errorf("config: bar %w", err)
@@ -85,7 +85,7 @@ func (cfg *Config) Init(ctx context.Context) error {
 	}
 
 	batches = make(items.Batches, 0)
-	batches, err = items.ShowBar(batches)
+	batches, err = items.ShowBar(cfg.logger, batches)
 
 	if err != nil {
 		return fmt.Errorf("config: appear bar %w", err)

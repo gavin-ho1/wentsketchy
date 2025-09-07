@@ -2,8 +2,8 @@ package items
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -12,10 +12,11 @@ import (
 )
 
 type FrontAppItem struct {
+	logger *slog.Logger
 }
 
-func NewFrontAppItem() FrontAppItem {
-	return FrontAppItem{}
+func NewFrontAppItem(logger *slog.Logger) FrontAppItem {
+	return FrontAppItem{logger}
 }
 
 const frontAppItemName = "front_app"
@@ -25,10 +26,16 @@ func (i FrontAppItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("front_app: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	updateEvent, err := args.BuildEvent()
 
 	if err != nil {
-		return batches, errors.New("front_app: could not generate update event")
+		i.logger.Error("front_app: could not generate update event", slog.Any("error", err))
+		return batches, nil
 	}
 
 	frontAppItem := sketchybar.ItemOptions{
@@ -73,6 +80,11 @@ func (i FrontAppItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "front_app: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	if !isFrontApp(args.Name) {
 		return batches, nil
 	}

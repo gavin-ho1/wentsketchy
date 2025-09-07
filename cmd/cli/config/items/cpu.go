@@ -45,10 +45,16 @@ func (i CPUItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("cpu: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	updateEvent, err := args.BuildEvent()
 
 	if err != nil {
-		return batches, errors.New("cpu: could not generate update event")
+		i.logger.Error("cpu: could not generate update event", slog.Any("error", err))
+		return batches, nil
 	}
 
 	cpuIconItem := sketchybar.ItemOptions{
@@ -206,6 +212,11 @@ func (i CPUItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "cpu: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	if !isCPU(args.Name) {
 		return batches, nil
 	}
@@ -214,13 +225,15 @@ func (i CPUItem) Update(
 		topProcess, err := i.getTopProcess(ctx)
 
 		if err != nil {
-			return batches, err
+			i.logger.ErrorContext(ctx, "cpu: could not get top process", slog.Any("error", err))
+			return batches, nil
 		}
 
 		cpuLoad, err := i.getCPULoad()
 
 		if err != nil {
-			return batches, err
+			i.logger.ErrorContext(ctx, "cpu: could not get cpu load", slog.Any("error", err))
+			return batches, nil
 		}
 
 		cpuTopItem := sketchybar.ItemOptions{
@@ -255,6 +268,11 @@ type process struct {
 }
 
 func (item CPUItem) getProcesses(ctx context.Context) ([]*process, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			item.logger.ErrorContext(ctx, "cpu: recovered from panic in getProcesses", slog.Any("panic", r))
+		}
+	}()
 	out, err := item.command.RunBufferized(ctx, "ps", "auxcr")
 
 	if err != nil {
@@ -329,6 +347,11 @@ type cpuLoad struct {
 }
 
 func (item CPUItem) getCPULoad() (*cpuLoad, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			item.logger.Error("cpu: recovered from panic in getCPULoad", slog.Any("panic", r))
+		}
+	}()
 	cmd := "top | head -n 4"
 	output, err := exec.Command("zsh", "-c", cmd).Output()
 	if err != nil {

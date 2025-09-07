@@ -33,10 +33,16 @@ func (i BatteryItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("battery: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	updateEvent, err := args.BuildEvent()
 
 	if err != nil {
-		return batches, errors.New("battery: could not generate update event")
+		i.logger.Error("battery: could not generate update event", slog.Any("error", err))
+		return batches, nil
 	}
 
 	batteryItem := sketchybar.ItemOptions{
@@ -83,6 +89,11 @@ func (i BatteryItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("battery: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	if !isBattery(args.Name) {
 		return batches, nil
 	}
@@ -93,13 +104,15 @@ func (i BatteryItem) Update(
 		cmd := exec.Command("pmset", "-g", "batt")
 		output, err := cmd.Output()
 		if err != nil {
-			return batches, fmt.Errorf("battery: could not get battery info from pmset. %w", err)
+			i.logger.Error("battery: could not get battery info from pmset", slog.Any("error", err))
+			return batches, nil
 		}
 
 		outputStr := string(output)
 		percentage, state, err := parsePmsetOutput(outputStr)
 		if err != nil {
-			return batches, fmt.Errorf("battery: could not parse pmset output. %w", err)
+			i.logger.Error("battery: could not parse pmset output", slog.Any("error", err))
+			return batches, nil
 		}
 
 		icon, color := getBatteryStatus(percentage, state)

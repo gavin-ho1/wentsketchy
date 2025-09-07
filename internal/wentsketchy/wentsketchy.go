@@ -62,9 +62,9 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 
 	di.Sketchybar = sketchybar.NewAPI(di.Logger, di.command)
 
-	mainIcon := items.NewMainIconItem()
-	calendar := items.NewCalendarItem()
-	frontApp := items.NewFrontAppItem()
+	mainIcon := items.NewMainIconItem(di.Logger)
+	calendar := items.NewCalendarItem(di.Logger)
+	frontApp := items.NewFrontAppItem(di.Logger)
 	aerospace := items.NewAerospaceItem(di.Logger, di.Aerospace, di.Sketchybar)
 	battery := items.NewBatteryItem(di.Logger)
 	cpu := items.NewCPUItem(di.Logger, di.command)

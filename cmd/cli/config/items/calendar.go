@@ -2,36 +2,42 @@ package items
 
 import (
 	"context"
-	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
-	"github.com/lucax88x/wentsketchy/internal/formatter"
+	// "github.com/lucax88x/wentsketchy/internal/formatter"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar/events"
 )
-
+  
 type CalendarItem struct {
+	logger *slog.Logger
 }
 
-func NewCalendarItem() CalendarItem {
-	return CalendarItem{}
+func NewCalendarItem(logger *slog.Logger) CalendarItem {
+	return CalendarItem{logger}
 }
 
 const calendarItemName = "calendar"
 
 func (i CalendarItem) Init(
-	_ context.Context,
+	ctx context.Context,
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
-	updateEvent, err := args.BuildEvent()
-
-	if err != nil {
-		return batches, errors.New("calendar: could not generate update event")
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("calendar: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
+	
+	// Use a simple shell script that updates the time directly
+	updateScript := `#!/bin/bash
+TIME=$(date "+%b %d %H:%M")
+sketchybar --set "$NAME" label="$TIME"`
 
 	calendarItem := sketchybar.ItemOptions{
 		Display: "active",
@@ -47,15 +53,15 @@ func (i CalendarItem) Init(
 			},
 		},
 		Label: sketchybar.ItemLabelOptions{
+			Value: "Loading...",
 			Padding: sketchybar.PaddingOptions{
 				Left:  pointer(0),
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq: pointer(1),
+		UpdateFreq: pointer(60), // Update every minute
 		Updates:    "on",
-		Script:     updateEvent,
-		// Click_script:            "$PLUGIN_DIR/zen.sh",
+		Script:     updateScript, // Use inline script for time updates
 	}
 
 	batches = batch(batches, s("--add", "item", calendarItemName, position))
@@ -66,18 +72,26 @@ func (i CalendarItem) Init(
 }
 
 func (i CalendarItem) Update(
-	_ context.Context,
+	ctx context.Context,
 	batches Batches,
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	// Handle system wake events since routine updates are handled by inline script
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "calendar: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
+	
 	if !isCalendar(args.Name) {
 		return batches, nil
 	}
 
-	if args.Event == events.Routine || args.Event == events.Forced {
+	if args.Event == events.SystemWoke {
+		// Update time on system wake
 		now := time.Now()
-		formattedTime := formatter.ShortDateTime(now)
+		formattedTime := now.Format("Jan 02 15:04")
 
 		calendarItem := sketchybar.ItemOptions{
 			Label: sketchybar.ItemLabelOptions{

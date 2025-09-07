@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
@@ -37,125 +38,242 @@ func NewFifoServer(
 }
 
 func (f FifoServer) Start(ctx context.Context) {
-	ch := make(chan string)
+	// Add recovery mechanism for the entire server
 	defer func() {
-		close(ch)
+		if r := recover(); r != nil {
+			f.logger.ErrorContext(ctx, "server: recovered from panic in Start", slog.Any("panic", r))
+		}
 	}()
 
-	go func(ctx context.Context) {
-		err := f.fifo.Listen(ctx, settings.FifoPath, ch)
+	f.logger.InfoContext(ctx, "server: starting FIFO server")
 
-		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not listen fifo", slog.Any("err", err))
+	// Retry mechanism for FIFO operations
+	maxRetries := 3
+	retryDelay := time.Second * 5
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			f.logger.InfoContext(ctx, "server: context cancelled before starting")
+			return
+		default:
 		}
-	}(ctx)
 
+		f.logger.InfoContext(ctx, "server: attempting to start FIFO listener", 
+			slog.Int("attempt", attempt), 
+			slog.Int("maxRetries", maxRetries))
+
+		if err := f.startFifoListener(ctx); err != nil {
+			f.logger.ErrorContext(ctx, "server: FIFO listener failed", 
+				slog.Any("error", err),
+				slog.Int("attempt", attempt))
+			
+			if attempt < maxRetries {
+				f.logger.InfoContext(ctx, "server: retrying FIFO listener", slog.Duration("delay", retryDelay))
+				
+				select {
+				case <-ctx.Done():
+					f.logger.InfoContext(ctx, "server: context cancelled during retry delay")
+					return
+				case <-time.After(retryDelay):
+					continue
+				}
+			} else {
+				f.logger.ErrorContext(ctx, "server: FIFO listener failed after all retries, but continuing to run")
+				// Don't return here - keep the server running even if FIFO fails
+				break
+			}
+		} else {
+			f.logger.InfoContext(ctx, "server: FIFO listener started successfully")
+			break
+		}
+	}
+
+	// Even if FIFO fails, keep the server running with a fallback mechanism
+	f.runFallbackServer(ctx)
+}
+
+func (f FifoServer) startFifoListener(ctx context.Context) error {
+	ch := make(chan string, 100) // Buffered channel to prevent blocking
+	defer close(ch)
+
+	// Start FIFO listener in a separate goroutine
+	listenerCtx, listenerCancel := context.WithCancel(ctx)
+	defer listenerCancel()
+
+	listenerDone := make(chan error, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				f.logger.ErrorContext(listenerCtx, "server: recovered from panic in FIFO listener", slog.Any("panic", r))
+				listenerDone <- nil // Don't send error for panic recovery
+			}
+		}()
+
+		err := f.fifo.Listen(listenerCtx, settings.FifoPath, ch)
+		listenerDone <- err
+	}()
+
+	// Process messages with error recovery
 	for {
 		select {
-		case msg := <-ch:
-			f.handle(ctx, msg)
 		case <-ctx.Done():
-			f.logger.InfoContext(ctx, "server: cancel")
-			return
+			f.logger.InfoContext(ctx, "server: FIFO listener context cancelled")
+			return ctx.Err()
+		case err := <-listenerDone:
+			if err != nil {
+				f.logger.ErrorContext(ctx, "server: FIFO listener error", slog.Any("error", err))
+				return err
+			}
+			f.logger.InfoContext(ctx, "server: FIFO listener completed normally")
+			return nil
+		case msg := <-ch:
+			// Handle message with error recovery
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						f.logger.ErrorContext(ctx, "server: recovered from panic while handling message", 
+							slog.Any("panic", r),
+							slog.String("message", msg))
+					}
+				}()
+				f.handleWithRetry(ctx, msg)
+			}()
 		}
 	}
 }
 
-func (f FifoServer) handle(
-	ctx context.Context,
-	msg string,
-) {
-	if strings.HasPrefix(msg, "init") {
-		err := f.config.Init(ctx)
+func (f FifoServer) runFallbackServer(ctx context.Context) {
+	f.logger.InfoContext(ctx, "server: running fallback server mode")
+	
+	// Keep the server alive even if FIFO fails
+	ticker := time.NewTicker(time.Minute * 5) // Periodic health check
+	defer ticker.Stop()
 
-		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not handle init", slog.Any("err", err))
+	for {
+		select {
+		case <-ctx.Done():
+			f.logger.InfoContext(ctx, "server: fallback server context cancelled")
+			return
+		case <-ticker.C:
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						f.logger.ErrorContext(ctx, "server: recovered from panic in fallback server", slog.Any("panic", r))
+					}
+				}()
+				
+				f.logger.DebugContext(ctx, "server: fallback server health check")
+				// Periodic aerospace refresh to keep data fresh
+				f.aerospace.SingleFlightRefreshTree()
+			}()
 		}
+	}
+}
 
-		return
+func (f FifoServer) handleWithRetry(ctx context.Context, msg string) {
+	maxRetries := 3
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		if err := f.handleSafely(ctx, msg); err != nil {
+			f.logger.ErrorContext(ctx, "server: message handling failed", 
+				slog.Any("error", err),
+				slog.String("message", msg),
+				slog.Int("attempt", attempt))
+			
+			if attempt < maxRetries {
+				time.Sleep(time.Millisecond * 100) // Brief delay before retry
+				continue
+			} else {
+				f.logger.ErrorContext(ctx, "server: message handling failed after all retries, skipping message", 
+					slog.String("message", msg))
+			}
+		} else {
+			break // Success
+		}
+	}
+}
+
+func (f FifoServer) handleSafely(ctx context.Context, msg string) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			f.logger.ErrorContext(ctx, "server: recovered from panic in handleSafely", 
+				slog.Any("panic", r),
+				slog.String("message", msg))
+			err = nil // Convert panic to nil error so we don't retry panics
+		}
+	}()
+
+	if strings.HasPrefix(msg, "init") {
+		f.logger.InfoContext(ctx, "server: handling init message")
+		if err := f.config.Init(ctx); err != nil {
+			f.logger.ErrorContext(ctx, "server: init failed, but continuing", slog.Any("error", err))
+		}
+		return nil
 	}
 
 	if strings.HasPrefix(msg, events.AerospaceRefresh) {
-		f.logger.InfoContext(
-			ctx,
-			"server: react",
-			slog.String("event", events.AerospaceRefresh),
-		)
-
+		f.logger.InfoContext(ctx, "server: handling aerospace refresh")
+		
 		f.aerospace.SingleFlightRefreshTree()
 
-		err := f.config.Update(ctx, &args.In{
+		if err := f.config.Update(ctx, &args.In{
 			Name:  items.AerospaceName,
 			Event: events.AerospaceRefresh,
-		})
-
-		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not handle update", slog.Any("err", err))
+		}); err != nil {
+			f.logger.ErrorContext(ctx, "server: aerospace refresh update failed", slog.Any("error", err))
+			return err
 		}
-
-		return
+		return nil
 	}
 
 	if strings.HasPrefix(msg, "update") {
+		f.logger.InfoContext(ctx, "server: handling update message")
+		
 		args, err := args.FromEvent(msg)
-
 		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not get args", slog.Any("err", err))
+			f.logger.ErrorContext(ctx, "server: could not parse args", slog.Any("error", err))
+			return err
 		}
 
-		f.logger.InfoContext(
-			ctx,
-			"server: react",
-			slog.String("event", "update"),
+		f.logger.InfoContext(ctx, "server: processing update",
 			slog.String("name", args.Name),
-			slog.String("sender", args.Event),
-			slog.Any("info", args.Info),
-		)
+			slog.String("event", args.Event),
+			slog.String("info", args.Info))
 
-		err = f.config.Update(ctx, args)
-
-		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not handle update", slog.Any("err", err))
+		if err := f.config.Update(ctx, args); err != nil {
+			f.logger.ErrorContext(ctx, "server: update failed", slog.Any("error", err))
+			return err
 		}
-
-		return
+		return nil
 	}
 
 	if strings.HasPrefix(msg, events.WorkspaceChange) {
-		f.logger.InfoContext(
-			ctx,
-			"server: react",
-			slog.String("event", events.WorkspaceChange),
-		)
-
+		f.logger.InfoContext(ctx, "server: handling workspace change")
+		
 		eventJSON, _ := strings.CutPrefix(msg, events.WorkspaceChange)
 		var data events.WorkspaceChangeEventInfo
-		err := json.Unmarshal([]byte(eventJSON), &data)
-
-		if err != nil {
-			f.logger.ErrorContext(
-				ctx,
-				"server: could not deserialize data for aerospace_workspace_change",
-				slog.String("msg", msg),
-				slog.Any("err", err),
-			)
+		
+		if err := json.Unmarshal([]byte(eventJSON), &data); err != nil {
+			f.logger.ErrorContext(ctx, "server: could not deserialize workspace change data",
+				slog.String("message", msg),
+				slog.Any("error", err))
+			return err
 		}
 
 		f.aerospace.SetPrevWorkspaceID(data.Prev)
 		f.aerospace.SetFocusedWorkspaceID(data.Focused)
 
-		err = f.config.Update(ctx, &args.In{
+		if err := f.config.Update(ctx, &args.In{
 			Name:  items.AerospaceName,
 			Event: events.WorkspaceChange,
 			Info:  eventJSON,
-		})
-
-		if err != nil {
-			f.logger.ErrorContext(ctx, "server: could not handle update", slog.Any("err", err))
+		}); err != nil {
+			f.logger.ErrorContext(ctx, "server: workspace change update failed", slog.Any("error", err))
+			return err
 		}
-
-		return
+		return nil
 	}
 
-	f.logger.InfoContext(ctx, "server: did not handle message", slog.String("msg", msg))
+	f.logger.DebugContext(ctx, "server: unhandled message", slog.String("message", msg))
+	return nil
 }

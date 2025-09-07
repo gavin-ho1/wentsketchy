@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const Separator = '¬'
@@ -28,10 +29,8 @@ func makeSureFifoExists(path string) error {
 	_, err := os.Stat(path)
 
 	if err == nil {
-		err = os.Remove(path)
-
-		if err != nil {
-			return fmt.Errorf("fifo: could not remove fifo. %w", err)
+		if err = os.Remove(path); err != nil {
+			return fmt.Errorf("fifo: could not remove existing fifo: %w", err)
 		}
 	}
 
@@ -39,12 +38,9 @@ func makeSureFifoExists(path string) error {
 }
 
 func (f *Reader) Start(path string) error {
-	err := makeSureFifoExists(path)
-
-	if err != nil {
-		return fmt.Errorf("fifo: error creating file. %w", err)
+	if err := makeSureFifoExists(path); err != nil {
+		return fmt.Errorf("fifo: error creating file: %w", err)
 	}
-
 	return nil
 }
 
@@ -53,93 +49,273 @@ func (f *Reader) Listen(
 	path string,
 	ch chan<- string,
 ) error {
-	pipe, err := os.OpenFile(path, os.O_RDWR, os.ModeNamedPipe)
-
 	defer func() {
-		err = pipe.Close()
-
-		if err != nil {
-			err = fmt.Errorf("fifo: could not close reader %w", err)
+		if r := recover(); r != nil {
+			f.logger.ErrorContext(ctx, "fifo: recovered from panic in Listen", slog.Any("panic", r))
 		}
 	}()
 
-	if err != nil {
-		return fmt.Errorf("fifo: error opening for reading. %w", err)
+	maxRetries := 3
+	retryDelay := time.Second * 2
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		select {
+		case <-ctx.Done():
+			f.logger.InfoContext(ctx, "fifo: context cancelled before retry")
+			return ctx.Err()
+		default:
+		}
+
+		f.logger.InfoContext(ctx, "fifo: attempting to open FIFO", 
+			slog.String("path", path),
+			slog.Int("attempt", attempt))
+
+		err := f.listenAttempt(ctx, path, ch)
+		
+		if err == nil {
+			f.logger.InfoContext(ctx, "fifo: listen completed successfully")
+			return nil
+		}
+
+		// Handle specific error types
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			f.logger.InfoContext(ctx, "fifo: context cancelled/timeout during listen")
+			return err
+		}
+
+		f.logger.ErrorContext(ctx, "fifo: listen attempt failed", 
+			slog.Any("error", err),
+			slog.Int("attempt", attempt),
+			slog.Int("maxRetries", maxRetries))
+
+		if attempt < maxRetries {
+			f.logger.InfoContext(ctx, "fifo: retrying listen", slog.Duration("delay", retryDelay))
+			
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryDelay):
+				// Recreate FIFO before retry
+				if recreateErr := makeSureFifoExists(path); recreateErr != nil {
+					f.logger.ErrorContext(ctx, "fifo: failed to recreate FIFO", slog.Any("error", recreateErr))
+				}
+				continue
+			}
+		}
 	}
 
-	reader := bufio.NewReader(pipe)
+	f.logger.ErrorContext(ctx, "fifo: all listen attempts failed, continuing anyway")
+	return fmt.Errorf("fifo: failed to establish stable connection after %d attempts", maxRetries)
+}
 
-	internalCh := make(chan []byte)
+func (f *Reader) listenAttempt(
+	ctx context.Context,
+	path string,
+	ch chan<- string,
+) error {
+	defer func() {
+		if r := recover(); r != nil {
+			f.logger.ErrorContext(ctx, "fifo: recovered from panic in listenAttempt", slog.Any("panic", r))
+		}
+	}()
+
+	pipe, err := f.openFifoSafely(ctx, path)
+	if err != nil {
+		return fmt.Errorf("fifo: error opening for reading: %w", err)
+	}
+
+	defer func() {
+		if closeErr := pipe.Close(); closeErr != nil {
+			f.logger.ErrorContext(ctx, "fifo: error closing pipe", slog.Any("error", closeErr))
+		}
+	}()
+
+	reader := bufio.NewReader(pipe)
+	internalCh := make(chan []byte, 100) // Buffered channel
+	readerDone := make(chan error, 1)
 	continueReading := true
 
 	defer close(internalCh)
 
+	// Reader goroutine with error recovery
 	go func() {
-		for continueReading {
-			line, readErr := reader.ReadBytes(Separator)
+		defer func() {
+			if r := recover(); r != nil {
+				f.logger.ErrorContext(ctx, "fifo: recovered from panic in reader goroutine", slog.Any("panic", r))
+				readerDone <- fmt.Errorf("reader panic: %v", r)
+			}
+		}()
 
-			if errors.Is(err, io.EOF) {
-				f.logger.ErrorContext(ctx, "fifo: got EOF")
-				break
+		for continueReading {
+			select {
+			case <-ctx.Done():
+				readerDone <- ctx.Err()
+				return
+			default:
 			}
 
+			// Set read timeout to prevent hanging
+			if err := pipe.SetReadDeadline(time.Now().Add(time.Second * 10)); err != nil {
+				f.logger.DebugContext(ctx, "fifo: could not set read deadline", slog.Any("error", err))
+			}
+
+			line, readErr := reader.ReadBytes(Separator)
+			
 			if readErr != nil {
-				err = readErr
-				f.logger.ErrorContext(ctx, "fifo: readbytes err", slog.Any("error", err))
-				break
+				if errors.Is(readErr, io.EOF) {
+					f.logger.InfoContext(ctx, "fifo: received EOF, stopping reader")
+					readerDone <- readErr
+					return
+				}
+				
+				if os.IsTimeout(readErr) {
+					f.logger.DebugContext(ctx, "fifo: read timeout, continuing")
+					continue
+				}
+				
+				f.logger.ErrorContext(ctx, "fifo: read error", slog.Any("error", readErr))
+				readerDone <- readErr
+				return
 			}
 
 			if continueReading {
-				internalCh <- line
+				select {
+				case internalCh <- line:
+				case <-ctx.Done():
+					readerDone <- ctx.Err()
+					return
+				default:
+					f.logger.WarnContext(ctx, "fifo: channel full, dropping message")
+				}
 			}
 		}
+		
+		readerDone <- nil
 	}()
 
+	// Message processing loop
 	for {
 		select {
 		case <-ctx.Done():
-			f.logger.InfoContext(ctx, "fifo: cancel")
+			f.logger.InfoContext(ctx, "fifo: context cancelled")
 			continueReading = false
+			
+			// Clean shutdown
+			f.ensureCloseWithTimeout(path, time.Second*5)
+			return ctx.Err()
 
-			err = pipe.Close()
+		case err := <-readerDone:
+			f.logger.InfoContext(ctx, "fifo: reader goroutine finished", slog.Any("error", err))
+			continueReading = false
+			
+			f.ensureCloseWithTimeout(path, time.Second*5)
+			return err
 
-			if err != nil {
-				err = fmt.Errorf("fifo: could not close reader %w", err)
-			}
-
-			err = ensureClose(path)
-
-			if err != nil {
-				err = fmt.Errorf("fifo: could not close fifo with EOF %w", err)
-			}
-
-			return nil
 		case data := <-internalCh:
-			nline := string(data)
-			nline = strings.TrimRight(nline, string(Separator))
-			nline = strings.TrimLeft(nline, "\n")
-			ch <- nline
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						f.logger.ErrorContext(ctx, "fifo: recovered from panic while processing message", slog.Any("panic", r))
+					}
+				}()
+
+				nline := string(data)
+				nline = strings.TrimRight(nline, string(Separator))
+				nline = strings.TrimLeft(nline, "\n")
+				nline = strings.TrimSpace(nline)
+				
+				if nline != "" {
+					select {
+					case ch <- nline:
+					case <-ctx.Done():
+						return
+					default:
+						f.logger.WarnContext(ctx, "fifo: output channel full, dropping message", slog.String("message", nline))
+					}
+				}
+			}()
 		}
 	}
 }
 
-func ensureClose(path string) error {
-	// f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0640)
-	//
-	// if err != nil {
-	// 	return fmt.Errorf("fifo: error opening file to write EOF: %w", err)
-	// }
-	//
-	// _, err = f.WriteString("EOF")
-	//
-	// if err != nil {
-	// 	return fmt.Errorf("fifo: error while writing EOF: %w", err)
-	// }
+func (f *Reader) openFifoSafely(ctx context.Context, path string) (*os.File, error) {
+	// Check if FIFO exists before opening
+	if stat, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			f.logger.InfoContext(ctx, "fifo: FIFO doesn't exist, creating", slog.String("path", path))
+			if err := makeSureFifoExists(path); err != nil {
+				return nil, fmt.Errorf("fifo: could not create FIFO: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("fifo: error checking FIFO: %w", err)
+		}
+	} else if stat.Mode()&os.ModeNamedPipe == 0 {
+		f.logger.WarnContext(ctx, "fifo: path exists but is not a named pipe, recreating", slog.String("path", path))
+		if err := os.Remove(path); err != nil {
+			f.logger.ErrorContext(ctx, "fifo: could not remove non-FIFO file", slog.Any("error", err))
+		}
+		if err := makeSureFifoExists(path); err != nil {
+			return nil, fmt.Errorf("fifo: could not recreate FIFO: %w", err)
+		}
+	}
 
-	err := os.Remove(path)
+	// Open with timeout context
+	openCtx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
 
-	if err != nil {
-		return fmt.Errorf("fifo: could not remove fifo. %w", err)
+	openDone := make(chan struct{})
+	var pipe *os.File
+	var openErr error
+
+	go func() {
+		defer close(openDone)
+		pipe, openErr = os.OpenFile(path, os.O_RDWR, os.ModeNamedPipe)
+	}()
+
+	select {
+	case <-openCtx.Done():
+		return nil, fmt.Errorf("fifo: timeout opening FIFO: %w", openCtx.Err())
+	case <-openDone:
+		if openErr != nil {
+			return nil, fmt.Errorf("fifo: error opening FIFO: %w", openErr)
+		}
+		return pipe, nil
+	}
+}
+
+func (f *Reader) ensureCloseWithTimeout(path string, timeout time.Duration) {
+	done := make(chan error, 1)
+	
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				done <- fmt.Errorf("panic during cleanup: %v", r)
+			}
+		}()
+		
+		done <- f.ensureClose(path)
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			f.logger.ErrorContext(context.Background(), "fifo: error during cleanup", slog.Any("error", err))
+		}
+	case <-time.After(timeout):
+		f.logger.WarnContext(context.Background(), "fifo: cleanup timeout", slog.Duration("timeout", timeout))
+	}
+}
+
+func (f *Reader) ensureClose(path string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			f.logger.ErrorContext(context.Background(), "fifo: recovered from panic in ensureClose", slog.Any("panic", r))
+		}
+	}()
+
+	// Try to remove the FIFO file
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("fifo: could not remove fifo: %w", err)
 	}
 
 	return nil

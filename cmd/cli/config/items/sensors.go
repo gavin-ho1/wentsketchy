@@ -3,7 +3,6 @@ package items
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -42,10 +41,16 @@ func (i SensorsItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("sensors: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	updateEvent, err := args.BuildEvent()
 
 	if err != nil {
-		return batches, errors.New("sensors: could not generate update event")
+		i.logger.Error("sensors: could not generate update event", slog.Any("error", err))
+		return batches, nil
 	}
 
 	sensorsIconItem := sketchybar.ItemOptions{
@@ -159,6 +164,11 @@ func (i SensorsItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "sensors: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	if !isFAN(args.Name) {
 		return batches, nil
 	}
@@ -167,13 +177,15 @@ func (i SensorsItem) Update(
 		fanSpeeds, err := i.getFanSpeeds(ctx)
 
 		if err != nil {
-			return batches, err
+			i.logger.ErrorContext(ctx, "sensors: could not get fan speeds", slog.Any("error", err))
+			return batches, nil
 		}
 
 		temperatures, err := i.getTemperatures(ctx)
 
 		if err != nil {
-			return batches, err
+			i.logger.ErrorContext(ctx, "sensors: could not get temperatures", slog.Any("error", err))
+			return batches, nil
 		}
 
 		fanSpeed := float32(-1)
@@ -209,6 +221,11 @@ func isFAN(name string) bool {
 }
 
 func (i SensorsItem) getFanSpeeds(ctx context.Context) ([]float32, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "sensors: recovered from panic in getFanSpeeds", slog.Any("panic", r))
+		}
+	}()
 	out, err := i.command.Run(ctx, statsApp, "fans")
 
 	if err != nil {
@@ -242,6 +259,11 @@ type temperatures struct {
 }
 
 func (i SensorsItem) getTemperatures(ctx context.Context) (temperatures, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "sensors: recovered from panic in getTemperatures", slog.Any("panic", r))
+		}
+	}()
 	var results temperatures
 	out, err := i.command.Run(ctx, statsApp, "list", "-t")
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lucax88x/wentsketchy/internal/command"
+	"github.com/lucax88x/wentsketchy/internal/jobs"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
 )
 
@@ -22,6 +23,14 @@ func NewWifiJob(logger *slog.Logger, command *command.Command, sketchybar sketch
 
 func (j *WifiJob) Start(ctx context.Context) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				j.logger.ErrorContext(ctx, "wifi job: recovered from panic", slog.Any("panic", r))
+				time.Sleep(time.Second * 5)
+				j.logger.InfoContext(ctx, "wifi job: restarting after panic")
+				j.Start(ctx)
+			}
+		}()
 		var lastStatus string
 		ticker := time.NewTicker(2 * time.Second) // Check every 2 seconds
 		defer ticker.Stop()
@@ -61,3 +70,5 @@ func (j *WifiJob) Start(ctx context.Context) {
 		}
 	}()
 }
+
+var _ jobs.Job = (*WifiJob)(nil)

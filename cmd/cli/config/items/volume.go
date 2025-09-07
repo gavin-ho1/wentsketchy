@@ -2,7 +2,6 @@ package items
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -33,10 +32,16 @@ func (i VolumeItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("volume: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	updateEvent, err := args.BuildEvent()
 
 	if err != nil {
-		return batches, errors.New("volume: could not generate update event")
+		i.logger.Error("volume: could not generate update event", slog.Any("error", err))
+		return batches, nil
 	}
 
 	volumeItem := sketchybar.ItemOptions{
@@ -80,6 +85,11 @@ func (i VolumeItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "volume: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	if !isVolume(args.Name) {
 		return batches, nil
 	}
@@ -94,7 +104,8 @@ end if
 `
 		output, err := i.command.Run(ctx, "osascript", "-e", script)
 		if err != nil {
-			return batches, fmt.Errorf("volume: could not get volume info. %w", err)
+			i.logger.ErrorContext(ctx, "volume: could not get volume info", slog.Any("error", err))
+			return batches, nil
 		}
 
 		trimmedOutput := strings.TrimSpace(output)
@@ -114,7 +125,8 @@ end if
 		} else {
 			volume, err := strconv.Atoi(trimmedOutput)
 			if err != nil {
-				return batches, fmt.Errorf("volume: could not parse volume percentage. %w", err)
+				i.logger.ErrorContext(ctx, "volume: could not parse volume percentage", slog.Any("error", err))
+				return batches, nil
 			}
 			roundedVolume := int(math.Round(float64(volume)/5.0) * 5.0)
 			icon = getVolumeIcon(roundedVolume)

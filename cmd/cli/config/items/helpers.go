@@ -14,9 +14,7 @@ func m(left []string, right []string) []string {
 	return append(left, right...)
 }
 
-func pointer(i int) *int {
-	return &i
-}
+
 
 func Flatten(slices ...[]string) []string {
 	result := []string{}

@@ -2,10 +2,8 @@ package items
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"strings"
-	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -28,14 +26,36 @@ func NewBluetoothItem(logger *slog.Logger, command *command.Command) BluetoothIt
 const bluetoothItemName = "bluetooth"
 
 func (i BluetoothItem) Init(
-	_ context.Context,
+	ctx context.Context,
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
-	updateEvent, err := args.BuildEvent()
-	if err != nil {
-		return batches, errors.New("bluetooth: could not generate update event")
-	}
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("bluetooth: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
+	
+	// Create a simple shell script for updates instead of relying on args.BuildEvent()
+	updateScript := `#!/bin/bash
+# Try different paths for blueutil
+if command -v blueutil >/dev/null 2>&1; then
+    BLUEUTIL="blueutil"
+elif command -v /usr/local/bin/blueutil >/dev/null 2>&1; then
+    BLUEUTIL="/usr/local/bin/blueutil"
+elif command -v /opt/homebrew/bin/blueutil >/dev/null 2>&1; then
+    BLUEUTIL="/opt/homebrew/bin/blueutil"
+else
+    sketchybar --set "$NAME" label="N/A" icon="` + icons.BluetoothOff + `" icon.color="` + colors.Red + `"
+    exit 0
+fi
+
+STATUS=$($BLUEUTIL -p 2>/dev/null)
+if [ "$STATUS" = "1" ]; then
+    sketchybar --set "$NAME" label="On" icon="` + icons.Bluetooth + `" icon.color="` + colors.Blue + `"
+else
+    sketchybar --set "$NAME" label="Off" icon="` + icons.BluetoothOff + `" icon.color="` + colors.White + `"
+fi`
 
 	bluetoothItem := sketchybar.ItemOptions{
 		Display: "active",
@@ -54,15 +74,16 @@ func (i BluetoothItem) Init(
 			},
 		},
 		Label: sketchybar.ItemLabelOptions{
+			Value: "Loading...",
 			Padding: sketchybar.PaddingOptions{
 				Left:  pointer(0),
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		UpdateFreq:   pointer(120),
-		Updates:      "on",
-		Script:       updateEvent,
-		ClickScript: "sh -c 'blueutil -p toggle && sketchybar --trigger bluetooth_change'",
+		UpdateFreq:  pointer(5), // Check every 5 seconds
+		Updates:     "on",
+		Script:      updateScript, // Use inline script instead of args.BuildEvent()
+		ClickScript: "blueutil -p toggle; sleep 0.2; sketchybar --trigger bluetooth_change",
 	}
 
 	batches = batch(batches, s("--add", "item", bluetoothItemName, position))
@@ -79,24 +100,39 @@ func (i BluetoothItem) Update(
 	_ sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	// Since we're using inline scripts, this Update method is mainly for handling custom events
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.ErrorContext(ctx, "bluetooth: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
+	
 	if !isBluetooth(args.Name) {
 		return batches, nil
 	}
 
-	if args.Event == events.Routine || args.Event == events.Forced || args.Event == events.SystemWoke || args.Event == "bluetooth_change" {
-		output, err := retryBlueutil(ctx, i.command, "-p", 5, time.Second)
+	// Handle custom events like bluetooth_change or system_woke
+	if args.Event == "bluetooth_change" || args.Event == events.SystemWoke {
+		// Trigger the update script manually
+		var output string
+		var err error
+		
+		// Try multiple command paths
+		paths := []string{"blueutil", "/usr/local/bin/blueutil", "/opt/homebrew/bin/blueutil"}
+		for _, path := range paths {
+			output, err = i.command.Run(ctx, path, "-p")
+			if err == nil {
+				break
+			}
+		}
+
 		var label, color, icon string
 		if err != nil {
-			i.logger.ErrorContext(ctx, "blueutil failed",
-				slog.String("error", err.Error()),
-				slog.String("output", output),
-			)
-			label = "?"
+			label = "N/A"
 			color = colors.Red
 			icon = icons.BluetoothOff
 		} else {
 			trimmedOutput := strings.TrimSpace(output)
-
 			if trimmedOutput == "1" {
 				label = "On"
 				color = colors.Blue
@@ -124,19 +160,6 @@ func (i BluetoothItem) Update(
 	}
 
 	return batches, nil
-}
-
-func retryBlueutil(ctx context.Context, cmd *command.Command, arg string, retries int, delay time.Duration) (string, error) {
-	var out string
-	var err error
-	for i := 0; i < retries; i++ {
-		out, err = cmd.Run(ctx, "blueutil", arg)
-		if err == nil && strings.TrimSpace(out) != "" {
-			return out, nil
-		}
-		time.Sleep(delay)
-	}
-	return out, err
 }
 
 func isBluetooth(name string) bool {

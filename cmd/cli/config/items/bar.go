@@ -2,6 +2,7 @@ package items
 
 import (
 	"bytes"
+	"log/slog"
 	"os/exec"
 	"strings"
 
@@ -9,8 +10,13 @@ import (
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
 )
 
-func Bar(batches Batches) (Batches, error) {
-	monitor := getMonitorName()
+func Bar(logger *slog.Logger, batches Batches) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("bar: recovered from panic in Bar", slog.Any("panic", r))
+		}
+	}()
+	monitor := getMonitorName(logger)
 	left, right := getPaddingForMonitor(monitor)
 
 	bar := sketchybar.BarOptions{
@@ -34,8 +40,13 @@ func Bar(batches Batches) (Batches, error) {
 	return batches, nil
 }
 
-func ShowBar(batches Batches) (Batches, error) {
-	monitor := getMonitorName()
+func ShowBar(logger *slog.Logger, batches Batches) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("bar: recovered from panic in ShowBar", slog.Any("panic", r))
+		}
+	}()
+	monitor := getMonitorName(logger)
 	yOffset := getYOffsetForMonitor(monitor)
 
 	bar := sketchybar.BarOptions{
@@ -53,12 +64,18 @@ func ShowBar(batches Batches) (Batches, error) {
 }
 
 // getMonitorName returns the name of the first monitor found via `aerospace list-monitors`.
-func getMonitorName() string {
+func getMonitorName(logger *slog.Logger) string {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("bar: recovered from panic in getMonitorName", slog.Any("panic", r))
+		}
+	}()
 	cmd := exec.Command("aerospace", "list-monitors")
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
+		logger.Error("bar: failed to get monitor name", slog.Any("error", err))
 		return "default"
 	}
 

@@ -2,6 +2,7 @@ package items
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -11,10 +12,11 @@ import (
 )
 
 type MainIconItem struct {
+	logger *slog.Logger
 }
 
-func NewMainIconItem() MainIconItem {
-	return MainIconItem{}
+func NewMainIconItem(logger *slog.Logger) MainIconItem {
+	return MainIconItem{logger}
 }
 
 const mainIconItemName = "main_icon"
@@ -24,6 +26,11 @@ func (i MainIconItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("main_icon: recovered from panic in Init", slog.Any("panic", r))
+		}
+	}()
 	mainIcon := sketchybar.ItemOptions{
 		Display: "active",
 		Padding: sketchybar.PaddingOptions{
@@ -53,6 +60,11 @@ func (i MainIconItem) Update(
 	_ sketchybar.Position,
 	_ *args.In,
 ) (Batches, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			i.logger.Error("main_icon: recovered from panic in Update", slog.Any("panic", r))
+		}
+	}()
 	return batches, nil
 }
 

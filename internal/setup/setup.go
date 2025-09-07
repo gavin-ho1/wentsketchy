@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/lmittmann/tint"
@@ -65,6 +67,13 @@ func Run(buildExecutor ExecutorBuilder) ExecutionResult {
 	}
 
 	logger.Debug("main: completed", slog.Int("status_code", Ok))
+
+	// --- Start: Added to keep the application alive ---
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan // Block until a signal is received
+	logger.Info("main: received signal, shutting down...")
+	// --- End: Added to keep the application alive ---
 
 	return Ok
 }
