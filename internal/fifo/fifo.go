@@ -166,11 +166,6 @@ func (f *Reader) listenAttempt(
 			default:
 			}
 
-			// Set read timeout to prevent hanging
-			if err := pipe.SetReadDeadline(time.Now().Add(time.Second * 10)); err != nil {
-				f.logger.DebugContext(ctx, "fifo: could not set read deadline", slog.Any("error", err))
-			}
-
 			line, readErr := reader.ReadBytes(Separator)
 
 			if readErr != nil {
@@ -180,8 +175,9 @@ func (f *Reader) listenAttempt(
 					return
 				}
 
-				if os.IsTimeout(readErr) {
-					f.logger.DebugContext(ctx, "fifo: read timeout, continuing")
+				if errors.Is(readErr, syscall.EAGAIN) || errors.Is(readErr, syscall.EWOULDBLOCK) {
+					f.logger.DebugContext(ctx, "fifo: no data, continuing")
+					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 
@@ -281,7 +277,7 @@ func (f *Reader) openFifoSafely(ctx context.Context, path string) (*os.File, err
 
 	go func() {
 		defer close(openDone)
-		pipe, openErr = os.OpenFile(path, os.O_RDWR, os.ModeNamedPipe)
+		pipe, openErr = os.OpenFile(path, os.O_RDWR|syscall.O_NONBLOCK, os.ModeNamedPipe)
 	}()
 
 	select {
