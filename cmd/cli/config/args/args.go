@@ -29,19 +29,39 @@ type Out struct {
 }
 
 func FromEvent(msg string) (*In, error) {
-	// Find the positions of the fixed parts
-	argsStart := strings.Index(msg, "args: ") + len("args: ")
-	infoStart := strings.Index(msg, "info: ") + len("info: ")
+	argsPrefix := "args: "
+	infoPrefix := "info:" // Note: no surrounding spaces
 
-	// Extract the JSON substrings
-	argsJSON := msg[argsStart : infoStart-len(" info: ")]
-	infoJSON := msg[infoStart:]
+	// Find the start of the JSON data
+	argsStart := strings.Index(msg, argsPrefix)
+	if argsStart == -1 {
+		return nil, fmt.Errorf("args: could not find args prefix in message: %s", msg)
+	}
+	// The actual JSON and info data starts after the prefix
+	jsonAndInfo := msg[argsStart+len(argsPrefix):]
+
+	// Split the rest of the string by the info prefix
+	parts := strings.SplitN(jsonAndInfo, infoPrefix, 2)
+	argsJSON := parts[0]
+	infoJSON := ""
+	if len(parts) > 1 {
+		infoJSON = parts[1]
+	}
+
+	// Trim any whitespace from the JSON part, which handles the space(s)
+	// that were between the JSON and the info prefix.
+	argsJSON = strings.TrimSpace(argsJSON)
 
 	var args *In
 	err := json.Unmarshal([]byte(argsJSON), &args)
 
 	if err != nil {
-		return nil, fmt.Errorf("args: could not deserialize data. %w", err)
+		return nil, fmt.Errorf("args: could not deserialize data: %w. Got: %s", err, argsJSON)
+	}
+
+	if args == nil {
+		// This can happen if the JSON is "null" or empty
+		return nil, fmt.Errorf("args: deserialized data is nil. Got: %s", argsJSON)
 	}
 
 	args.Info = infoJSON
