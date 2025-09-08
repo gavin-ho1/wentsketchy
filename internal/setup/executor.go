@@ -19,6 +19,6 @@ func NewCliExecutor(viper *viper.Viper, console *console.Console) ProgramExecuto
 			logger.ErrorContext(ctx, "cli: failed to execute command", slog.Any("error", err))
 		}
 
-		return err
+		return nil
 	}
 }

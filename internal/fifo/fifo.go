@@ -25,20 +25,32 @@ func NewFifoReader(logger *slog.Logger) *Reader {
 	}
 }
 
-func makeSureFifoExists(path string) error {
-	_, err := os.Stat(path)
-
+func (f *Reader) makeSureFifoExists(path string) error {
+	stat, err := os.Stat(path)
 	if err == nil {
-		if err = os.Remove(path); err != nil {
-			return fmt.Errorf("fifo: could not remove existing fifo: %w", err)
+		if stat.Mode()&os.ModeNamedPipe == 0 {
+			f.logger.WarnContext(
+				context.Background(),
+				"fifo: path exists but is a regular file, not a named pipe. Removing it to create a FIFO.",
+				slog.String("path", path),
+			)
 		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("fifo: could not remove existing file: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("fifo: could not stat file: %w", err)
 	}
 
-	return syscall.Mkfifo(path, 0640)
+	if err := syscall.Mkfifo(path, 0640); err != nil {
+		return fmt.Errorf("fifo: could not create fifo file: %w", err)
+	}
+	f.logger.InfoContext(context.Background(), "fifo: successfully created fifo file", slog.String("path", path))
+	return nil
 }
 
 func (f *Reader) Start(path string) error {
-	if err := makeSureFifoExists(path); err != nil {
+	if err := f.makeSureFifoExists(path); err != nil {
 		return fmt.Errorf("fifo: error creating file: %w", err)
 	}
 	return nil
@@ -66,12 +78,12 @@ func (f *Reader) Listen(
 		default:
 		}
 
-		f.logger.InfoContext(ctx, "fifo: attempting to open FIFO", 
+		f.logger.InfoContext(ctx, "fifo: attempting to open FIFO",
 			slog.String("path", path),
 			slog.Int("attempt", attempt))
 
 		err := f.listenAttempt(ctx, path, ch)
-		
+
 		if err == nil {
 			f.logger.InfoContext(ctx, "fifo: listen completed successfully")
 			return nil
@@ -83,20 +95,20 @@ func (f *Reader) Listen(
 			return err
 		}
 
-		f.logger.ErrorContext(ctx, "fifo: listen attempt failed", 
+		f.logger.ErrorContext(ctx, "fifo: listen attempt failed",
 			slog.Any("error", err),
 			slog.Int("attempt", attempt),
 			slog.Int("maxRetries", maxRetries))
 
 		if attempt < maxRetries {
 			f.logger.InfoContext(ctx, "fifo: retrying listen", slog.Duration("delay", retryDelay))
-			
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(retryDelay):
 				// Recreate FIFO before retry
-				if recreateErr := makeSureFifoExists(path); recreateErr != nil {
+				if recreateErr := f.makeSureFifoExists(path); recreateErr != nil {
 					f.logger.ErrorContext(ctx, "fifo: failed to recreate FIFO", slog.Any("error", recreateErr))
 				}
 				continue
@@ -160,19 +172,19 @@ func (f *Reader) listenAttempt(
 			}
 
 			line, readErr := reader.ReadBytes(Separator)
-			
+
 			if readErr != nil {
 				if errors.Is(readErr, io.EOF) {
 					f.logger.InfoContext(ctx, "fifo: received EOF, stopping reader")
 					readerDone <- readErr
 					return
 				}
-				
+
 				if os.IsTimeout(readErr) {
 					f.logger.DebugContext(ctx, "fifo: read timeout, continuing")
 					continue
 				}
-				
+
 				f.logger.ErrorContext(ctx, "fifo: read error", slog.Any("error", readErr))
 				readerDone <- readErr
 				return
@@ -189,7 +201,7 @@ func (f *Reader) listenAttempt(
 				}
 			}
 		}
-		
+
 		readerDone <- nil
 	}()
 
@@ -199,7 +211,7 @@ func (f *Reader) listenAttempt(
 		case <-ctx.Done():
 			f.logger.InfoContext(ctx, "fifo: context cancelled")
 			continueReading = false
-			
+
 			// Clean shutdown
 			f.ensureCloseWithTimeout(path, time.Second*5)
 			return ctx.Err()
@@ -207,7 +219,7 @@ func (f *Reader) listenAttempt(
 		case err := <-readerDone:
 			f.logger.InfoContext(ctx, "fifo: reader goroutine finished", slog.Any("error", err))
 			continueReading = false
-			
+
 			f.ensureCloseWithTimeout(path, time.Second*5)
 			return err
 
@@ -223,7 +235,7 @@ func (f *Reader) listenAttempt(
 				nline = strings.TrimRight(nline, string(Separator))
 				nline = strings.TrimLeft(nline, "\n")
 				nline = strings.TrimSpace(nline)
-				
+
 				if nline != "" {
 					select {
 					case ch <- nline:
@@ -243,7 +255,7 @@ func (f *Reader) openFifoSafely(ctx context.Context, path string) (*os.File, err
 	if stat, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			f.logger.InfoContext(ctx, "fifo: FIFO doesn't exist, creating", slog.String("path", path))
-			if err := makeSureFifoExists(path); err != nil {
+			if err := f.makeSureFifoExists(path); err != nil {
 				return nil, fmt.Errorf("fifo: could not create FIFO: %w", err)
 			}
 		} else {
@@ -254,7 +266,7 @@ func (f *Reader) openFifoSafely(ctx context.Context, path string) (*os.File, err
 		if err := os.Remove(path); err != nil {
 			f.logger.ErrorContext(ctx, "fifo: could not remove non-FIFO file", slog.Any("error", err))
 		}
-		if err := makeSureFifoExists(path); err != nil {
+		if err := f.makeSureFifoExists(path); err != nil {
 			return nil, fmt.Errorf("fifo: could not recreate FIFO: %w", err)
 		}
 	}
@@ -285,14 +297,14 @@ func (f *Reader) openFifoSafely(ctx context.Context, path string) (*os.File, err
 
 func (f *Reader) ensureCloseWithTimeout(path string, timeout time.Duration) {
 	done := make(chan error, 1)
-	
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 				done <- fmt.Errorf("panic during cleanup: %v", r)
 			}
 		}()
-		
+
 		done <- f.ensureClose(path)
 	}()
 
