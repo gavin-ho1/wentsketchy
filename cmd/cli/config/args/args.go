@@ -51,6 +51,7 @@ func FromEvent(msg string) (*In, error) {
 	// Trim any whitespace from the JSON part, which handles the space(s)
 	// that were between the JSON and the info prefix.
 	argsJSON = strings.TrimSpace(argsJSON)
+	infoJSON = strings.TrimSpace(infoJSON)
 
 	var args *In
 	err := json.Unmarshal([]byte(argsJSON), &args)
