@@ -94,6 +94,8 @@ Then run:
 cp com.user.wentsketchy.plist ~/Library/LaunchAgents/
 launchctl load com.user.wentsketchy.plist
 ```
+Macos may prompt you to allow the process to have access to bluetooth, if it does, allow it, or the bluetooth item will not work.
+
 This should allow wentsketchy to run persistently.
 
 ## My Personal Changes
