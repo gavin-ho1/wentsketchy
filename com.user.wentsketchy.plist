@@ -8,7 +8,7 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/student/bin/wentsketchy</string>
+        <string>/Users/YOUR_USERNAME/bin/wentsketchy</string>
         <string>start</string>
     </array>
 
