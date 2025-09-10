@@ -85,7 +85,7 @@ right:
 Please note that starting wentsketchy from `.sketchybarrc` will not work on startup (something to do with terminal enviroments I think?) and will sporadically stall/quit. Follow the steps below to allow wentsketchy to run persistently.
 ## To make the wentsketchy process run persisently:
 
-Change `YOUR_USERNAME` in the `.plist` file to your username:
+Change `YOUR_USERNAME` in `com.user.wentsketchy.plist` to your username:
 ```shell
 <string>/Users/YOUR_USERNAME/bin/wentsketchy</string>
 ```
