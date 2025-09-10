@@ -82,6 +82,20 @@ right:
   - calendar
 ```
 
+Please note that starting wentsketchy from `.sketchybarrc` will not work on startup (something to do with terminal enviroments I think?) and will sporadically stall/quit. Follow the steps below to allow wentsketchy to run persistently.
+## To make the wentsketchy process run persisently:
+
+Change `YOUR_USERNAME` in the `.plist` file to your username:
+```shell
+<string>/Users/YOUR_USERNAME/bin/wentsketchy</string>
+```
+Then run:
+```
+cp com.user.wentsketchy.plist ~/Library/LaunchAgents/
+launchctl load com.user.wentsketchy.plist
+```
+This should allow wentsketchy to run persistently.
+
 ## My Personal Changes
 
 Requires a few different fonts to render correctly:
