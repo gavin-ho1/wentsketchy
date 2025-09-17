@@ -50,7 +50,7 @@ export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
 sketchybar --add item loading_indicator left \
            --set loading_indicator label="loading bar..." 
 
-#Don't start the bar until System Events is ready
+#Don't start the wentsketchy until System Events is ready
 until osascript -e 'tell application "System Events" to return true' &>/dev/null; do
   sleep 1
 done
