@@ -59,11 +59,6 @@ exec-on-workspace-change = [
   '-c',
   'echo "aerospace_workspace_change { \"focused\": \"$AEROSPACE_FOCUSED_WORKSPACE\", \"prev\": \"$AEROSPACE_PREV_WORKSPACE\" } ¬" > /tmp/wentsketchy',
 ]
-
-# If using brew (must use brew services restart command, otherwise a blank bar will appear on startup):
-after-startup-command = [
-  "exec-and-forget brew services restart sketchybar",
-]
 ```
 
 and put in ~/.config/sketchybar/config.yaml the wentsketchy configuration
@@ -135,4 +130,4 @@ aerospace items will emit specific events, such as `aerospace-workspace-change +
   we have a front-app event from sketchybar, but no front-window events from anyone
   we can get the focused window, but no event to react to
 - click on window
-  we cannot select a window from aeropsace
+  we cannot select a window from aerospace
