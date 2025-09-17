@@ -44,9 +44,21 @@ then use this .sketchybarrc to test
 
 ```shell
 #!/bin/bash
-
-#Ensure blueutil can be used in this terminal session
+pkill wentsketchy
 export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH
+
+sketchybar --add item loading_indicator left \
+           --set loading_indicator label="loading bar..." 
+
+#Don't start the bar until System Events is ready
+until osascript -e 'tell application "System Events" to return true' &>/dev/null; do
+  sleep 1
+done
+
+#Extra 2 seconds of sleep just in case
+sleep 2
+
+sketchybar --remove loading_indicator
 
 "$HOME/bin/wentsketchy" start
 ```
