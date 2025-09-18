@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
@@ -29,6 +30,10 @@ type AerospaceItem struct {
 	closingItems        map[string]time.Time // Track items being closed for delayed removal
 	workspaceWindowIDs  map[string][]string  // Track window IDs for each workspace
 	bracketStates       map[string]string    // Track bracket creation state to prevent duplicates
+	// mu is a mutex to protect the maps above from concurrent access.
+	// The Update method can be called from multiple goroutines, so we need to
+	// ensure that only one goroutine can modify the maps at a time.
+	mu sync.Mutex
 }
 
 func NewAerospaceItem(
@@ -62,6 +67,9 @@ func (item *AerospaceItem) Init(
 	position sketchybar.Position,
 	batches Batches,
 ) (Batches, error) {
+	item.mu.Lock()
+	defer item.mu.Unlock()
+
 	defer func() {
 		if r := recover(); r != nil {
 			item.logger.ErrorContext(ctx, "aerospace item: recovered from panic in Init", slog.Any("panic", r))
@@ -86,6 +94,9 @@ func (item *AerospaceItem) Update(
 	position sketchybar.Position,
 	args *args.In,
 ) (Batches, error) {
+	item.mu.Lock()
+	defer item.mu.Unlock()
+
 	defer func() {
 		if r := recover(); r != nil {
 			item.logger.ErrorContext(ctx, "aerospace item: recovered from panic in Update", 

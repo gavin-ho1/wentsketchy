@@ -29,7 +29,7 @@ func TestUnitArgs(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "some-name", argsIn.Name)
 		require.Equal(t, "some-sender", argsIn.Event)
-		require.Equal(t, `{ "key": "value" } `, argsIn.Info)
+		require.Equal(t, `{ "key": "value" }`, argsIn.Info)
 		require.Equal(t, "some-button", argsIn.Button)
 		require.Equal(t, "some-modifier", argsIn.Modifier)
 	})
