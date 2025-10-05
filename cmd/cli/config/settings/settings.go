@@ -40,10 +40,10 @@ type Settings struct {
 //nolint:gochecknoglobals // ok
 var Sketchybar = Settings{
 	BarBackgroundColor:  colors.Transparent,
-	BarHeight:           pointer(35),
+	BarHeight:           pointer(40),
 	BarMargin:           pointer(0),
 	BarTransitionTime:   "0",
-	ItemHeight:          pointer(25),
+	ItemHeight:          pointer(30),
 	ItemSpacing:         pointer(2),
 	ItemRadius:          pointer(45),
 	IconPadding:         pointer(12),
@@ -52,11 +52,11 @@ var Sketchybar = Settings{
 	LabelColor:          colors.White,
 	LabelFont:           FontLabel,
 	LabelFontKind:       "Medium",
-	LabelFontSize:       "14.0",
+	LabelFontSize:       "16.0",
 	IconColor:           colors.White,
 	IconFont:            FontIcon,
 	IconFontKind:        "Bold",
-	IconFontSize:        "16.0",
+	IconFontSize:        "18.0",
 	IconStripFont:       FontAppIcon,
 	Aerospace: AerospaceSettings{
 		Padding:                         pointer(8),
