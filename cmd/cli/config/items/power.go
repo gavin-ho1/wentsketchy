@@ -114,7 +114,7 @@ func (i PowerItem) Init(
 		ClickScript: `sudo shutdown -h now && sketchybar --set power popup.drawing=off`,
 	}
 	shutdownArgs := append(shutdownItem.ToArgs(), popupItemOptions...)
-	shutdownArgs = append(shutdownArgs, "icon.padding_left=10", "label.padding_left=10", "label.padding_right=10")
+	shutdownArgs = append(shutdownArgs, "icon.padding_left=9", "label.padding_left=10", "label.padding_right=10")
 	batches = batch(batches, m(s("--set", powerShutdownItemName), shutdownArgs))
 
 	restartItem := sketchybar.ItemOptions{
