@@ -101,7 +101,7 @@ func (i PowerItem) Init(
 		ClickScript: `pmset displaysleepnow && sketchybar --set power popup.drawing=off`,
 	}
 	sleepArgs := append(sleepItem.ToArgs(), popupItemOptions...)
-	sleepArgs = append(sleepArgs, "label.padding_left=10", "label.padding_right=10")
+	sleepArgs = append(sleepArgs, "icon.padding_left=10", "label.padding_left=10", "label.padding_right=10")
 	batches = batch(batches, m(s("--set", powerSleepItemName), sleepArgs))
 
 	shutdownItem := sketchybar.ItemOptions{
@@ -114,7 +114,7 @@ func (i PowerItem) Init(
 		ClickScript: `sudo shutdown -h now && sketchybar --set power popup.drawing=off`,
 	}
 	shutdownArgs := append(shutdownItem.ToArgs(), popupItemOptions...)
-	shutdownArgs = append(shutdownArgs, "label.padding_left=10", "label.padding_right=10")
+	shutdownArgs = append(shutdownArgs, "icon.padding_left=10", "label.padding_left=10", "label.padding_right=10")
 	batches = batch(batches, m(s("--set", powerShutdownItemName), shutdownArgs))
 
 	restartItem := sketchybar.ItemOptions{
@@ -127,7 +127,7 @@ func (i PowerItem) Init(
 		ClickScript: `sudo shutdown -r now && sketchybar --set power popup.drawing=off`,
 	}
 	restartArgs := append(restartItem.ToArgs(), popupItemOptions...)
-	restartArgs = append(restartArgs, "label.padding_left=10", "label.padding_right=10")
+	restartArgs = append(restartArgs, "icon.padding_left=10", "label.padding_left=10", "label.padding_right=10")
 	batches = batch(batches, m(s("--set", powerRestartItemName), restartArgs))
 
 	return batches, nil
