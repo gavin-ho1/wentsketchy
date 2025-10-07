@@ -45,6 +45,7 @@ const (
 	Tails           = ""
 	Work            = "" 
 	Settings        = ""
+	Restart         = "󰑓"
 )
 
 //nolint:gochecknoglobals // ok
