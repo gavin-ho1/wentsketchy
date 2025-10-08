@@ -143,7 +143,7 @@ func (i MediaItem) Init(
 		Label: sketchybar.ItemLabelOptions{
 			Padding: sketchybar.PaddingOptions{
 				Left:  settings.Sketchybar.IconPadding,
-				Right: pointer(0),
+				Right: pointer(1),
 			},
 		},
 		Background: sketchybar.BackgroundOptions{
