@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
@@ -17,15 +19,22 @@ import (
 )
 
 type MediaItem struct {
-	logger  *slog.Logger
-	command *command.Command
+	logger         *slog.Logger
+	command        *command.Command
+	mu             sync.Mutex
+	isPlayerActive bool
+	currentWidth   int
+	currentLabel   string
 }
 
 func NewMediaItem(
 	logger *slog.Logger,
 	command *command.Command,
-) MediaItem {
-	return MediaItem{logger, command}
+) *MediaItem {
+	return &MediaItem{
+		logger:  logger,
+		command: command,
+	}
 }
 
 const (
@@ -38,9 +47,11 @@ const (
 	mediaNextItemName      = "media.next"
 	mediaInfoItemName      = "media.info"
 	mediaBracketItemName   = "media.bracket"
+
+	avgCharWidth = 7
 )
 
-func (i MediaItem) Init(
+func (i *MediaItem) Init(
 	_ context.Context,
 	position sketchybar.Position,
 	batches Batches,
@@ -56,99 +67,55 @@ func (i MediaItem) Init(
 		return batches, nil
 	}
 
-	// This item is just a checker to trigger updates. It's not visible.
 	checkerItem := sketchybar.ItemOptions{
 		Updates:    "on",
 		Script:     updateEvent,
 		UpdateFreq: pointer(120),
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "off",
-		},
+		Background: sketchybar.BackgroundOptions{Drawing: "off"},
 	}
 	batches = batch(batches, s("--add", "item", mediaCheckerItemName, position))
 	batches = batch(batches, m(s("--set", mediaCheckerItemName), checkerItem.ToArgs()))
 	batches = batch(batches, s("--subscribe", mediaCheckerItemName, events.SystemWoke, mediaEvent, "routine", "forced"))
 
 	nextItem := sketchybar.ItemOptions{
-		Display: "active",
-		Icon: sketchybar.ItemIconOptions{
-			Value: icons.MediaNext,
-			Font: sketchybar.FontOptions{
-				Font: settings.FontIcon,
-			},
-			Padding: sketchybar.PaddingOptions{
-				Left:  pointer(0),
-				Right: settings.Sketchybar.IconPadding,
-			},
-		},
-		Label: sketchybar.ItemLabelOptions{
-			Drawing: "off",
-		},
+		Display:     "active",
+		Icon:        sketchybar.ItemIconOptions{Value: icons.MediaNext, Font: sketchybar.FontOptions{Font: settings.FontIcon}, Padding: sketchybar.PaddingOptions{Left: pointer(0), Right: settings.Sketchybar.IconPadding}},
+		Label:       sketchybar.ItemLabelOptions{Drawing: "off"},
 		ClickScript: `osascript -e 'tell application "Spotify" to next track' && sketchybar --trigger media_change`,
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "off",
-		},
+		Background:  sketchybar.BackgroundOptions{Drawing: "off"},
 	}
 	batches = batch(batches, s("--add", "item", mediaNextItemName, position))
 	batches = batch(batches, m(s("--set", mediaNextItemName), nextItem.ToArgs()))
 
 	playPauseItem := sketchybar.ItemOptions{
-		Display: "active",
-		Icon: sketchybar.ItemIconOptions{
-			Value: icons.MediaPlay,
-			Font: sketchybar.FontOptions{
-				Font: settings.FontIcon,
-			},
-			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
-				Right: settings.Sketchybar.IconPadding,
-			},
-		},
-		Label: sketchybar.ItemLabelOptions{
-			Drawing: "off",
-		},
+		Display:     "active",
+		Icon:        sketchybar.ItemIconOptions{Value: icons.MediaPlay, Font: sketchybar.FontOptions{Font: settings.FontIcon}, Padding: sketchybar.PaddingOptions{Left: settings.Sketchybar.IconPadding, Right: settings.Sketchybar.IconPadding}},
+		Label:       sketchybar.ItemLabelOptions{Drawing: "off"},
 		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "off",
-		},
+		Background:  sketchybar.BackgroundOptions{Drawing: "off"},
 	}
 	batches = batch(batches, s("--add", "item", mediaPlayPauseItemName, position))
 	batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 
 	prevItem := sketchybar.ItemOptions{
-		Display: "active",
-		Icon: sketchybar.ItemIconOptions{
-			Value: icons.MediaPrevious,
-			Font: sketchybar.FontOptions{
-				Font: settings.FontIcon,
-			},
-			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
-				Right: pointer(0),
-			},
-		},
-		Label: sketchybar.ItemLabelOptions{
-			Drawing: "off",
-		},
+		Display:     "active",
+		Icon:        sketchybar.ItemIconOptions{Value: icons.MediaPrevious, Font: sketchybar.FontOptions{Font: settings.FontIcon}, Padding: sketchybar.PaddingOptions{Left: settings.Sketchybar.IconPadding, Right: pointer(0)}},
+		Label:       sketchybar.ItemLabelOptions{Drawing: "off"},
 		ClickScript: `osascript -e 'tell application "Spotify" to previous track' && sketchybar --trigger media_change`,
-		Background: sketchybar.BackgroundOptions{
-			Drawing: "off",
-		},
+		Background:  sketchybar.BackgroundOptions{Drawing: "off"},
 	}
 	batches = batch(batches, s("--add", "item", mediaPrevItemName, position))
 	batches = batch(batches, m(s("--set", mediaPrevItemName), prevItem.ToArgs()))
 
 	infoItem := sketchybar.ItemOptions{
-		Display: "active",
+		Display:     "active",
+		Width:       pointer(0),
+		ScrollTexts: "off",
 		Label: sketchybar.ItemLabelOptions{
-			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
-				Right: pointer(1),
-			},
-		},
-		Background: sketchybar.BackgroundOptions{
 			Drawing: "off",
+			Padding: sketchybar.PaddingOptions{Left: settings.Sketchybar.IconPadding, Right: pointer(1)},
 		},
+		Background: sketchybar.BackgroundOptions{Drawing: "off"},
 	}
 	batches = batch(batches, s("--add", "item", mediaInfoItemName, position))
 	batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
@@ -156,26 +123,20 @@ func (i MediaItem) Init(
 	bracketItem := sketchybar.BracketOptions{
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "on",
-			Color: sketchybar.ColorOptions{
-				Color: colors.Transparent,
-			},
+			Color:   sketchybar.ColorOptions{Color: colors.Transparent},
+			Border:  sketchybar.BorderOptions{Color: colors.WhiteA05},
 		},
 	}
 	batches = batch(batches, s(
-		"--add",
-		"bracket",
-		mediaBracketItemName,
-		mediaNextItemName,
-		mediaPlayPauseItemName,
-		mediaPrevItemName,
-		mediaInfoItemName,
+		"--add", "bracket", mediaBracketItemName,
+		mediaPrevItemName, mediaPlayPauseItemName, mediaNextItemName, mediaInfoItemName,
 	))
 	batches = batch(batches, m(s("--set", mediaBracketItemName), bracketItem.ToArgs()))
 
 	return batches, nil
 }
 
-func (i MediaItem) Update(
+func (i *MediaItem) Update(
 	ctx context.Context,
 	batches Batches,
 	_ sketchybar.Position,
@@ -190,73 +151,96 @@ func (i MediaItem) Update(
 		return batches, nil
 	}
 
+	i.mu.Lock()
+	defer i.mu.Unlock()
+
 	itemsToManage := []string{
-		mediaPrevItemName,
-		mediaPlayPauseItemName,
-		mediaNextItemName,
-		mediaInfoItemName,
-		mediaBracketItemName,
+		mediaPrevItemName, mediaPlayPauseItemName, mediaNextItemName,
+		mediaInfoItemName, mediaBracketItemName,
 	}
 
 	playerState, err := i.command.Run(ctx, "osascript", "-e", `tell application "Spotify" to player state as string`)
-	if err != nil {
-		i.logger.DebugContext(ctx, "media: could not get player state", slog.Any("error", err))
-		for _, item := range itemsToManage {
-			batches = batch(batches, s("--set", item, "drawing=off"))
+	trimmedState := strings.TrimSpace(playerState)
+
+	if err != nil || (trimmedState != "playing" && trimmedState != "paused") {
+		if i.isPlayerActive {
+			for _, item := range itemsToManage {
+				batches = batch(batches, s("--set", item, "drawing=off"))
+			}
+			i.isPlayerActive = false
+			i.currentWidth = 0
+			i.currentLabel = ""
 		}
 		return batches, nil
 	}
 
-	for _, item := range itemsToManage {
-		batches = batch(batches, s("--set", item, "drawing=on"))
-	}
-
-	trackBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to name of current track`)
-	artistBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to artist of current track`)
-
-	track, err := encoding.DecodeAppleScriptOutput(trackBuff.Bytes())
-	if err != nil {
-		i.logger.ErrorContext(ctx, "media: could not decode track", slog.Any("error", err))
-	}
-	artist, err := encoding.DecodeAppleScriptOutput(artistBuff.Bytes())
-	if err != nil {
-		i.logger.ErrorContext(ctx, "media: could not decode artist", slog.Any("error", err))
-	}
-
-	cleanTrack := strings.TrimSpace(track)
-	cleanArtist := strings.TrimSpace(artist)
-	label := fmt.Sprintf("%s • %s", cleanTrack, cleanArtist)
-	runes := []rune(label)
-	if len(runes) > 40 {
-		label = string(runes[:37]) + "..."
-	}
-
-	trimmedState := strings.TrimSpace(playerState)
-	if trimmedState == "playing" {
-		playPauseItem := sketchybar.ItemOptions{
-			Icon: sketchybar.ItemIconOptions{Value: icons.MediaPause},
-		}
-		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
-
-		infoItem := sketchybar.ItemOptions{
-			Label: sketchybar.ItemLabelOptions{
-				Value: label,
-			},
-		}
-		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
-		batches = batch(batches, s("--set", mediaInfoItemName, "drawing=on"))
-
-	} else if trimmedState == "paused" {
-		playPauseItem := sketchybar.ItemOptions{
-			Icon: sketchybar.ItemIconOptions{Value: icons.MediaPlay},
-		}
-		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
-
-		batches = batch(batches, s("--set", mediaInfoItemName, "drawing=off"))
-	} else {
+	if !i.isPlayerActive {
 		for _, item := range itemsToManage {
-			batches = batch(batches, s("--set", item, "drawing=off"))
+			batches = batch(batches, s("--set", item, "drawing=on"))
 		}
+		i.isPlayerActive = true
+	}
+
+	var targetWidth int
+	var newLabel string
+	var isPlaying bool
+
+	if trimmedState == "playing" {
+		trackBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to name of current track`)
+		artistBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to artist of current track`)
+		track, _ := encoding.DecodeAppleScriptOutput(trackBuff.Bytes())
+		artist, _ := encoding.DecodeAppleScriptOutput(artistBuff.Bytes())
+
+		cleanLabel := fmt.Sprintf("%s • %s", strings.TrimSpace(track), strings.TrimSpace(artist))
+		cleanLabel = strings.ReplaceAll(cleanLabel, "\"", "")
+		cleanLabel = strings.ReplaceAll(cleanLabel, "'", "")
+
+		if len([]rune(cleanLabel)) > 40 {
+			newLabel = string([]rune(cleanLabel)[:37]) + "..."
+		} else {
+			newLabel = cleanLabel
+		}
+		labelRunes := []rune(newLabel)
+		targetWidth = len(labelRunes)*avgCharWidth + *settings.Sketchybar.IconPadding + 1
+		isPlaying = true
+	} else {
+		newLabel = ""
+		targetWidth = 0
+		isPlaying = false
+	}
+
+	if targetWidth != i.currentWidth || newLabel != i.currentLabel {
+		var animationArgs []string
+		if targetWidth > i.currentWidth {
+			animationArgs = []string{
+				"label.align=right",
+				fmt.Sprintf("label=\"%s\"", newLabel),
+				"label.drawing=on",
+				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
+				"width=" + strconv.Itoa(targetWidth),
+			}
+		} else {
+			animationArgs = []string{
+				"label.align=left",
+				fmt.Sprintf("label=\"%s\"", newLabel),
+				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
+				"width=" + strconv.Itoa(targetWidth),
+			}
+			if targetWidth == 0 {
+				animationArgs = append(animationArgs, "label.drawing=off")
+			}
+		}
+		batches = batch(batches, m(s("--animate", sketchybar.AnimationTanh, "15", "--set", mediaInfoItemName), animationArgs))
+		i.currentWidth = targetWidth
+		i.currentLabel = newLabel
+	}
+
+	if isPlaying {
+		playPauseItem := sketchybar.ItemOptions{Icon: sketchybar.ItemIconOptions{Value: icons.MediaPause}}
+		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
+	} else {
+		playPauseItem := sketchybar.ItemOptions{Icon: sketchybar.ItemIconOptions{Value: icons.MediaPlay}}
+		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 	}
 
 	return batches, nil
