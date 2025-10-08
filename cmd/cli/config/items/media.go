@@ -8,7 +8,6 @@ import (
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
-	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
 	"github.com/lucax88x/wentsketchy/internal/command"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
@@ -29,10 +28,14 @@ func NewMediaItem(
 
 const (
 	mediaItemName        = "media"
-	mediaTrackItemName   = "media.track"
 	mediaEvent           = "media_change"
-	
 	mediaCheckerItemName = "media.checker"
+
+	mediaPrevItemName      = "media.prev"
+	mediaPlayPauseItemName = "media.playpause"
+	mediaNextItemName      = "media.next"
+	mediaInfoItemName      = "media.info"
+	mediaBracketItemName   = "media.bracket"
 )
 
 func (i MediaItem) Init(
@@ -64,35 +67,96 @@ func (i MediaItem) Init(
 	batches = batch(batches, m(s("--set", mediaCheckerItemName), checkerItem.ToArgs()))
 	batches = batch(batches, s("--subscribe", mediaCheckerItemName, events.SystemWoke, mediaEvent, "routine", "forced"))
 
-	
-
-	trackItem := sketchybar.ItemOptions{
+	prevItem := sketchybar.ItemOptions{
 		Display: "active",
-		YOffset: pointer(0),
-		Label: sketchybar.ItemLabelOptions{
-			Drawing: "off",
+		Icon: sketchybar.ItemIconOptions{
+			Value: icons.MediaPrevious,
+			Font: sketchybar.FontOptions{
+				Font: settings.FontIcon,
+			},
 			Padding: sketchybar.PaddingOptions{
 				Left:  settings.Sketchybar.IconPadding,
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
-		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
-		Background: sketchybar.BackgroundOptions{
-			Color: sketchybar.ColorOptions{
-				Color: colors.Transparent,
+		Label: sketchybar.ItemLabelOptions{
+			Drawing: "off",
+		},
+		ClickScript: `osascript -e 'tell application "Spotify" to previous track' && sketchybar --trigger media_change`,
+	}
+	batches = batch(batches, s("--add", "item", mediaPrevItemName, position))
+	batches = batch(batches, m(s("--set", mediaPrevItemName), prevItem.ToArgs()))
+
+	playPauseItem := sketchybar.ItemOptions{
+		Display: "active",
+		Icon: sketchybar.ItemIconOptions{
+			Value: icons.MediaPlay,
+			Font: sketchybar.FontOptions{
+				Font: settings.FontIcon,
 			},
-			
-			CornerRadius: settings.Sketchybar.ItemRadius,
 			Padding: sketchybar.PaddingOptions{
-				Left:  pointer(5),
-				Right: pointer(5),
+				Left:  settings.Sketchybar.IconPadding,
+				Right: settings.Sketchybar.IconPadding,
+			},
+		},
+		Label: sketchybar.ItemLabelOptions{
+			Drawing: "off",
+		},
+		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
+	}
+	batches = batch(batches, s("--add", "item", mediaPlayPauseItemName, position))
+	batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
+
+	nextItem := sketchybar.ItemOptions{
+		Display: "active",
+		Icon: sketchybar.ItemIconOptions{
+			Value: icons.MediaNext,
+			Font: sketchybar.FontOptions{
+				Font: settings.FontIcon,
+			},
+			Padding: sketchybar.PaddingOptions{
+				Left:  settings.Sketchybar.IconPadding,
+				Right: settings.Sketchybar.IconPadding,
+			},
+		},
+		Label: sketchybar.ItemLabelOptions{
+			Drawing: "off",
+		},
+		ClickScript: `osascript -e 'tell application "Spotify" to next track' && sketchybar --trigger media_change`,
+	}
+	batches = batch(batches, s("--add", "item", mediaNextItemName, position))
+	batches = batch(batches, m(s("--set", mediaNextItemName), nextItem.ToArgs()))
+
+	infoItem := sketchybar.ItemOptions{
+		Display: "active",
+		Label: sketchybar.ItemLabelOptions{
+			Padding: sketchybar.PaddingOptions{
+				Left:  settings.Sketchybar.IconPadding,
+				Right: settings.Sketchybar.IconPadding,
 			},
 		},
 	}
-	batches = batch(batches, s("--add", "item", mediaTrackItemName, position))
-	batches = batch(batches, m(s("--set", mediaTrackItemName), trackItem.ToArgs()))
+	batches = batch(batches, s("--add", "item", mediaInfoItemName, position))
+	batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
 
-	
+	bracketItem := sketchybar.BracketOptions{
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "on",
+			Color: sketchybar.ColorOptions{
+				Color: settings.Sketchybar.ItemBackgroundColor,
+			},
+		},
+	}
+	batches = batch(batches, s(
+		"--add",
+		"bracket",
+		mediaBracketItemName,
+		mediaPrevItemName,
+		mediaPlayPauseItemName,
+		mediaNextItemName,
+		mediaInfoItemName,
+	))
+	batches = batch(batches, m(s("--set", mediaBracketItemName), bracketItem.ToArgs()))
 
 	return batches, nil
 }
@@ -112,7 +176,13 @@ func (i MediaItem) Update(
 		return batches, nil
 	}
 
-	itemsToManage := []string{mediaTrackItemName}
+	itemsToManage := []string{
+		mediaPrevItemName,
+		mediaPlayPauseItemName,
+		mediaNextItemName,
+		mediaInfoItemName,
+		mediaBracketItemName,
+	}
 
 	playerState, err := i.command.Run(ctx, "osascript", "-e", `tell application "Spotify" to player state as string`)
 	if err != nil {
@@ -139,11 +209,11 @@ func (i MediaItem) Update(
 
 	trimmedState := strings.TrimSpace(playerState)
 	if trimmedState == "playing" {
-		label = fmt.Sprintf("%s %s %s %s", icons.MediaPrevious, icons.MediaPause, icons.MediaNext, label)
-		batches = batch(batches, s("--set", mediaTrackItemName, fmt.Sprintf("label=%s", label), "label.drawing=on"))
+		batches = batch(batches, s("--set", mediaPlayPauseItemName, fmt.Sprintf("icon=%s", icons.MediaPause)))
+		batches = batch(batches, s("--set", mediaInfoItemName, fmt.Sprintf("label=\"%s\"", label)))
 	} else if trimmedState == "paused" {
-		label = fmt.Sprintf("%s %s %s %s", icons.MediaPrevious, icons.MediaPlay, icons.MediaNext, label)
-		batches = batch(batches, s("--set", mediaTrackItemName, fmt.Sprintf("label=%s", label), "label.drawing=on"))
+		batches = batch(batches, s("--set", mediaPlayPauseItemName, fmt.Sprintf("icon=%s", icons.MediaPlay)))
+		batches = batch(batches, s("--set", mediaInfoItemName, fmt.Sprintf("label=\"%s\"", label)))
 	} else {
 		for _, item := range itemsToManage {
 			batches = batch(batches, s("--set", item, "drawing=off"))
