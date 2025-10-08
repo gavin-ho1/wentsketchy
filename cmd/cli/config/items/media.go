@@ -106,24 +106,7 @@ func (i MediaItem) Init(
 		Label: sketchybar.ItemLabelOptions{
 			Drawing: "off",
 		},
-		ClickScript: `
-			PLAYER_STATE=$(osascript -e 'tell application "Spotify" to player state as string')
-			if [ "$PLAYER_STATE" = "playing" ]; then
-				osascript -e 'tell application "Spotify" to pause'
-				sketchybar --set media.info label=""
-			else
-				osascript -e 'tell application "Spotify" to play'
-				TRACK=$(osascript -e 'tell application "Spotify" to name of current track')
-				ARTIST=$(osascript -e 'tell application "Spotify" to artist of current track')
-				LABEL="$TRACK • $ARTIST"
-				LENGTH=${#LABEL}
-				if [ $LENGTH -gt 40 ]; then
-					LABEL=${LABEL:0:37}"…"
-				fi
-				sketchybar --set media.info label="$LABEL"
-			fi
-			sketchybar --trigger media_change
-		`,
+		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "off",
 		},
@@ -245,7 +228,13 @@ func (i MediaItem) Update(
 		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 
 		infoItem := sketchybar.ItemOptions{
-			Label: sketchybar.ItemLabelOptions{Value: label},
+			Label: sketchybar.ItemLabelOptions{
+				Value: label,
+				Padding: sketchybar.PaddingOptions{
+					Left:  pointer(0),
+					Right: pointer(0),
+				},
+			},
 		}
 		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
 
@@ -256,7 +245,13 @@ func (i MediaItem) Update(
 		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 
 		infoItem := sketchybar.ItemOptions{
-			Label: sketchybar.ItemLabelOptions{Value: label},
+			Label: sketchybar.ItemLabelOptions{
+				Value: "",
+				Padding: sketchybar.PaddingOptions{
+					Left:  pointer(0),
+					Right: pointer(0),
+				},
+			},
 		}
 		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
 	} else {
