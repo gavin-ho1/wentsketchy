@@ -43,9 +43,17 @@ const (
 	None            = ""
 	Unknown         = "󰀧"
 	Tails           = ""
-	Work            = "" 
+	Work            = ""
 	Settings        = ""
 	Restart         = "󰑓"
+
+	// Media
+	MediaPlay       = "􀊄"
+	MediaPause      = "􀊆"
+	MediaNext       = "􀊌"
+	MediaPrevious   = "􀊊"
+	MediaShuffle    = "􀊝"
+	MediaRepeat     = "􀊞"
 )
 
 //nolint:gochecknoglobals // ok

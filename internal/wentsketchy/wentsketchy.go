@@ -73,6 +73,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 	bluetooth := items.NewBluetoothItem(di.Logger, di.command)
 	wifi := items.NewWifiItem(di.Logger, di.command)
 	power := items.NewPowerItem(di.Logger, di.command)
+	media := items.NewMediaItem(di.Logger, di.command)
 
 	di.Config = config.NewConfig(
 		cfg,
@@ -90,6 +91,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			"bluetooth": bluetooth,
 			"wifi":      wifi,
 			"power":     power,
+			"media":     media,
 		},
 		items.WentsketchyItems{
 			MainIcon:  mainIcon,
@@ -103,6 +105,7 @@ func initialize(ctx context.Context, di *Wentsketchy) error {
 			Bluetooth: bluetooth,
 			Wifi:      wifi,
 			Power:     power,
+			Media:     media,
 		},
 	)
 

@@ -35,4 +35,5 @@ type WentsketchyItems struct {
 	Bluetooth   BluetoothItem
 	Wifi        WifiItem
 	Power       PowerItem
+	Media       MediaItem
 }
