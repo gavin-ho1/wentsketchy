@@ -76,7 +76,7 @@ func (i MediaItem) Init(
 				Font: settings.FontIcon,
 			},
 			Padding: sketchybar.PaddingOptions{
-				Left:  settings.Sketchybar.IconPadding,
+				Left:  pointer(0),
 				Right: settings.Sketchybar.IconPadding,
 			},
 		},
@@ -123,7 +123,7 @@ func (i MediaItem) Init(
 			},
 			Padding: sketchybar.PaddingOptions{
 				Left:  settings.Sketchybar.IconPadding,
-				Right: settings.Sketchybar.IconPadding,
+				Right: pointer(0),
 			},
 		},
 		Label: sketchybar.ItemLabelOptions{
