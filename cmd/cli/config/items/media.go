@@ -230,13 +230,10 @@ func (i MediaItem) Update(
 		infoItem := sketchybar.ItemOptions{
 			Label: sketchybar.ItemLabelOptions{
 				Value: label,
-				Padding: sketchybar.PaddingOptions{
-					Left:  pointer(0),
-					Right: pointer(0),
-				},
 			},
 		}
 		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
+		batches = batch(batches, s("--set", mediaInfoItemName, "drawing=on"))
 
 	} else if trimmedState == "paused" {
 		playPauseItem := sketchybar.ItemOptions{
@@ -244,16 +241,7 @@ func (i MediaItem) Update(
 		}
 		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 
-		infoItem := sketchybar.ItemOptions{
-			Label: sketchybar.ItemLabelOptions{
-				Value: "",
-				Padding: sketchybar.PaddingOptions{
-					Left:  pointer(0),
-					Right: pointer(0),
-				},
-			},
-		}
-		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
+		batches = batch(batches, s("--set", mediaInfoItemName, "drawing=off"))
 	} else {
 		for _, item := range itemsToManage {
 			batches = batch(batches, s("--set", item, "drawing=off"))
