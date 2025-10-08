@@ -113,7 +113,7 @@ func (opts ItemLabelOptions) ToArgs() []string {
 	args = append(args, opts.Color.ToArgs(&parent)...)
 
 	if opts.Value != "" {
-		args = with(args, "label=%q", opts.Value)
+		args = with(args, "label=\"%s\"", opts.Value)
 	}
 	if opts.Font != EmptyFontOptions {
 		args = with(args, "label.font=%s", opts.Font.String())

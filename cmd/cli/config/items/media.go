@@ -226,8 +226,9 @@ func (i MediaItem) Update(
 	cleanTrack := strings.TrimSpace(track)
 	cleanArtist := strings.TrimSpace(artist)
 	label := fmt.Sprintf("%s • %s", cleanTrack, cleanArtist)
-	if len(label) > 40 {
-		label = label[:37] + "..."
+	runes := []rune(label)
+	if len(runes) > 40 {
+		label = string(runes[:37]) + "..."
 	}
 
 	trimmedState := strings.TrimSpace(playerState)
