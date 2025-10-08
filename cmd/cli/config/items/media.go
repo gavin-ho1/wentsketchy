@@ -84,6 +84,9 @@ func (i MediaItem) Init(
 			Drawing: "off",
 		},
 		ClickScript: `osascript -e 'tell application "Spotify" to next track' && sketchybar --trigger media_change`,
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "off",
+		},
 	}
 	batches = batch(batches, s("--add", "item", mediaNextItemName, position))
 	batches = batch(batches, m(s("--set", mediaNextItemName), nextItem.ToArgs()))
@@ -104,6 +107,9 @@ func (i MediaItem) Init(
 			Drawing: "off",
 		},
 		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "off",
+		},
 	}
 	batches = batch(batches, s("--add", "item", mediaPlayPauseItemName, position))
 	batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
@@ -124,6 +130,9 @@ func (i MediaItem) Init(
 			Drawing: "off",
 		},
 		ClickScript: `osascript -e 'tell application "Spotify" to previous track' && sketchybar --trigger media_change`,
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "off",
+		},
 	}
 	batches = batch(batches, s("--add", "item", mediaPrevItemName, position))
 	batches = batch(batches, m(s("--set", mediaPrevItemName), prevItem.ToArgs()))
@@ -135,6 +144,9 @@ func (i MediaItem) Init(
 				Left:  settings.Sketchybar.IconPadding,
 				Right: settings.Sketchybar.IconPadding,
 			},
+		},
+		Background: sketchybar.BackgroundOptions{
+			Drawing: "off",
 		},
 	}
 	batches = batch(batches, s("--add", "item", mediaInfoItemName, position))
@@ -210,11 +222,26 @@ func (i MediaItem) Update(
 
 	trimmedState := strings.TrimSpace(playerState)
 	if trimmedState == "playing" {
-		batches = batch(batches, s("--set", mediaPlayPauseItemName, fmt.Sprintf("icon=%s", icons.MediaPause)))
-		batches = batch(batches, s("--set", mediaInfoItemName, fmt.Sprintf("label=\"%s\"", label)))
+		playPauseItem := sketchybar.ItemOptions{
+			Icon: sketchybar.ItemIconOptions{Value: icons.MediaPause},
+		}
+		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
+
+		infoItem := sketchybar.ItemOptions{
+			Label: sketchybar.ItemLabelOptions{Value: label},
+		}
+		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
+
 	} else if trimmedState == "paused" {
-		batches = batch(batches, s("--set", mediaPlayPauseItemName, fmt.Sprintf("icon=%s", icons.MediaPlay)))
-		batches = batch(batches, s("--set", mediaInfoItemName, fmt.Sprintf("label=\"%s\"", label)))
+		playPauseItem := sketchybar.ItemOptions{
+			Icon: sketchybar.ItemIconOptions{Value: icons.MediaPlay},
+		}
+		batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
+
+		infoItem := sketchybar.ItemOptions{
+			Label: sketchybar.ItemLabelOptions{Value: label},
+		}
+		batches = batch(batches, m(s("--set", mediaInfoItemName), infoItem.ToArgs()))
 	} else {
 		for _, item := range itemsToManage {
 			batches = batch(batches, s("--set", item, "drawing=off"))
