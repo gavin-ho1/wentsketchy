@@ -71,6 +71,10 @@ func (i MediaItem) Init(
 		YOffset: pointer(0),
 		Label: sketchybar.ItemLabelOptions{
 			Drawing: "off",
+			Padding: sketchybar.PaddingOptions{
+				Left:  settings.Sketchybar.IconPadding,
+				Right: settings.Sketchybar.IconPadding,
+			},
 		},
 		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
 		Background: sketchybar.BackgroundOptions{
