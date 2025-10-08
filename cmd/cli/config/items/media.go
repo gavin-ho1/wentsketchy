@@ -11,6 +11,7 @@ import (
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
 	"github.com/lucax88x/wentsketchy/internal/command"
+	"github.com/lucax88x/wentsketchy/internal/encoding"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar/events"
 )
@@ -210,11 +211,20 @@ func (i MediaItem) Update(
 		batches = batch(batches, s("--set", item, "drawing=on"))
 	}
 
-	track, _ := i.command.Run(ctx, "osascript", "-e", `tell application "Spotify" to name of current track`)
-	artist, _ := i.command.Run(ctx, "osascript", "-e", `tell application "Spotify" to artist of current track`)
+	trackBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to name of current track`)
+	artistBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to artist of current track`)
 
-	cleanTrack := strings.ReplaceAll(strings.TrimSpace(track), "\"", "")
-	cleanArtist := strings.ReplaceAll(strings.TrimSpace(artist), "\"", "")
+	track, err := encoding.DecodeAppleScriptOutput(trackBuff.Bytes())
+	if err != nil {
+		i.logger.ErrorContext(ctx, "media: could not decode track", slog.Any("error", err))
+	}
+	artist, err := encoding.DecodeAppleScriptOutput(artistBuff.Bytes())
+	if err != nil {
+		i.logger.ErrorContext(ctx, "media: could not decode artist", slog.Any("error", err))
+	}
+
+	cleanTrack := strings.TrimSpace(track)
+	cleanArtist := strings.TrimSpace(artist)
 	label := fmt.Sprintf("%s • %s", cleanTrack, cleanArtist)
 	if len(label) > 40 {
 		label = label[:37] + "..."
