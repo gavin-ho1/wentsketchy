@@ -190,23 +190,61 @@ func (i *MediaItem) Update(
 		artistBuff, _ := i.command.RunBufferized(ctx, "osascript", "-e", `tell application "Spotify" to artist of current track`)
 		track, _ := encoding.DecodeAppleScriptOutput(trackBuff.Bytes())
 		artist, _ := encoding.DecodeAppleScriptOutput(artistBuff.Bytes())
-
-		cleanLabel := fmt.Sprintf("%s • %s", strings.TrimSpace(track), strings.TrimSpace(artist))
-		cleanLabel = strings.ReplaceAll(cleanLabel, "\"", "")
-		cleanLabel = strings.ReplaceAll(cleanLabel, "'", "")
-
-		if len([]rune(cleanLabel)) > 40 {
-			newLabel = string([]rune(cleanLabel)[:37]) + "..."
+	
+		// Clean and trim the strings
+		track = strings.TrimSpace(track)
+		artist = strings.TrimSpace(artist)
+		
+		// Remove quotes that might be in the output
+		track = strings.Trim(track, "\"'")
+		artist = strings.Trim(artist, "\"'")
+	
+		cleanLabel := fmt.Sprintf("%s • %s", track, artist)
+	
+		// Truncate if needed
+		labelRunes := []rune(cleanLabel)
+		if len(labelRunes) > 40 {
+			newLabel = string(labelRunes[:37]) + "..."
 		} else {
 			newLabel = cleanLabel
 		}
-		labelRunes := []rune(newLabel)
-		targetWidth = len(labelRunes)*avgCharWidth + *settings.Sketchybar.IconPadding + 1
+		
+		targetWidth = len([]rune(newLabel))*avgCharWidth + *settings.Sketchybar.IconPadding + 1
 		isPlaying = true
 	} else {
 		newLabel = ""
 		targetWidth = 0
 		isPlaying = false
+	}
+	
+	if targetWidth != i.currentWidth || newLabel != i.currentLabel {
+		// Escape the label properly for shell
+		escapedLabel := strings.ReplaceAll(newLabel, `\`, `\\`)
+		escapedLabel = strings.ReplaceAll(escapedLabel, `"`, `\"`)
+		
+		var animationArgs []string
+		if targetWidth > i.currentWidth {
+			animationArgs = []string{
+				"label.align=right",
+				fmt.Sprintf("label=%s", escapedLabel),
+				"label.drawing=on",
+				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
+				"width=" + strconv.Itoa(targetWidth),
+			}
+		} else {
+			animationArgs = []string{
+				"label.align=left",
+				fmt.Sprintf("label=%s", escapedLabel),
+				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
+				"width=" + strconv.Itoa(targetWidth),
+			}
+			if targetWidth == 0 {
+				animationArgs = append(animationArgs, "label.drawing=off")
+			}
+		}
+		batches = batch(batches, m(s("--animate", sketchybar.AnimationTanh, "15", "--set", mediaInfoItemName), animationArgs))
+		i.currentWidth = targetWidth
+		i.currentLabel = newLabel
 	}
 
 	if targetWidth != i.currentWidth || newLabel != i.currentLabel {
