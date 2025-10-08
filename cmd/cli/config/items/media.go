@@ -106,7 +106,24 @@ func (i MediaItem) Init(
 		Label: sketchybar.ItemLabelOptions{
 			Drawing: "off",
 		},
-		ClickScript: `osascript -e 'tell application "Spotify" to playpause' && sketchybar --trigger media_change`,
+		ClickScript: `
+			PLAYER_STATE=$(osascript -e 'tell application "Spotify" to player state as string')
+			if [ "$PLAYER_STATE" = "playing" ]; then
+				osascript -e 'tell application "Spotify" to pause'
+				sketchybar --set media.info label=""
+			else
+				osascript -e 'tell application "Spotify" to play'
+				TRACK=$(osascript -e 'tell application "Spotify" to name of current track')
+				ARTIST=$(osascript -e 'tell application "Spotify" to artist of current track')
+				LABEL="$TRACK • $ARTIST"
+				LENGTH=${#LABEL}
+				if [ $LENGTH -gt 40 ]; then
+					LABEL=${LABEL:0:37}"…"
+				fi
+				sketchybar --set media.info label="$LABEL"
+			fi
+			sketchybar --trigger media_change
+		`,
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "off",
 		},
@@ -215,7 +232,7 @@ func (i MediaItem) Update(
 
 	cleanTrack := strings.ReplaceAll(strings.TrimSpace(track), "\"", "")
 	cleanArtist := strings.ReplaceAll(strings.TrimSpace(artist), "\"", "")
-	label := fmt.Sprintf("%s - %s", cleanTrack, cleanArtist)
+	label := fmt.Sprintf("%s • %s", cleanTrack, cleanArtist)
 	if len(label) > 40 {
 		label = label[:37] + "..."
 	}
