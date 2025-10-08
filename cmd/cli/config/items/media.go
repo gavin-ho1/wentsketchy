@@ -8,6 +8,7 @@ import (
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/args"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
+	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/colors"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings/icons"
 	"github.com/lucax88x/wentsketchy/internal/command"
 	"github.com/lucax88x/wentsketchy/internal/sketchybar"
@@ -67,10 +68,10 @@ func (i MediaItem) Init(
 	batches = batch(batches, m(s("--set", mediaCheckerItemName), checkerItem.ToArgs()))
 	batches = batch(batches, s("--subscribe", mediaCheckerItemName, events.SystemWoke, mediaEvent, "routine", "forced"))
 
-	prevItem := sketchybar.ItemOptions{
+	nextItem := sketchybar.ItemOptions{
 		Display: "active",
 		Icon: sketchybar.ItemIconOptions{
-			Value: icons.MediaPrevious,
+			Value: icons.MediaNext,
 			Font: sketchybar.FontOptions{
 				Font: settings.FontIcon,
 			},
@@ -82,10 +83,10 @@ func (i MediaItem) Init(
 		Label: sketchybar.ItemLabelOptions{
 			Drawing: "off",
 		},
-		ClickScript: `osascript -e 'tell application "Spotify" to previous track' && sketchybar --trigger media_change`,
+		ClickScript: `osascript -e 'tell application "Spotify" to next track' && sketchybar --trigger media_change`,
 	}
-	batches = batch(batches, s("--add", "item", mediaPrevItemName, position))
-	batches = batch(batches, m(s("--set", mediaPrevItemName), prevItem.ToArgs()))
+	batches = batch(batches, s("--add", "item", mediaNextItemName, position))
+	batches = batch(batches, m(s("--set", mediaNextItemName), nextItem.ToArgs()))
 
 	playPauseItem := sketchybar.ItemOptions{
 		Display: "active",
@@ -107,10 +108,10 @@ func (i MediaItem) Init(
 	batches = batch(batches, s("--add", "item", mediaPlayPauseItemName, position))
 	batches = batch(batches, m(s("--set", mediaPlayPauseItemName), playPauseItem.ToArgs()))
 
-	nextItem := sketchybar.ItemOptions{
+	prevItem := sketchybar.ItemOptions{
 		Display: "active",
 		Icon: sketchybar.ItemIconOptions{
-			Value: icons.MediaNext,
+			Value: icons.MediaPrevious,
 			Font: sketchybar.FontOptions{
 				Font: settings.FontIcon,
 			},
@@ -122,10 +123,10 @@ func (i MediaItem) Init(
 		Label: sketchybar.ItemLabelOptions{
 			Drawing: "off",
 		},
-		ClickScript: `osascript -e 'tell application "Spotify" to next track' && sketchybar --trigger media_change`,
+		ClickScript: `osascript -e 'tell application "Spotify" to previous track' && sketchybar --trigger media_change`,
 	}
-	batches = batch(batches, s("--add", "item", mediaNextItemName, position))
-	batches = batch(batches, m(s("--set", mediaNextItemName), nextItem.ToArgs()))
+	batches = batch(batches, s("--add", "item", mediaPrevItemName, position))
+	batches = batch(batches, m(s("--set", mediaPrevItemName), prevItem.ToArgs()))
 
 	infoItem := sketchybar.ItemOptions{
 		Display: "active",
@@ -143,7 +144,7 @@ func (i MediaItem) Init(
 		Background: sketchybar.BackgroundOptions{
 			Drawing: "on",
 			Color: sketchybar.ColorOptions{
-				Color: settings.Sketchybar.ItemBackgroundColor,
+				Color: colors.Transparent,
 			},
 		},
 	}
@@ -151,9 +152,9 @@ func (i MediaItem) Init(
 		"--add",
 		"bracket",
 		mediaBracketItemName,
-		mediaPrevItemName,
-		mediaPlayPauseItemName,
 		mediaNextItemName,
+		mediaPlayPauseItemName,
+		mediaPrevItemName,
 		mediaInfoItemName,
 	))
 	batches = batch(batches, m(s("--set", mediaBracketItemName), bracketItem.ToArgs()))
