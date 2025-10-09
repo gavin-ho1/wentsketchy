@@ -218,15 +218,11 @@ func (i *MediaItem) Update(
 	}
 	
 	if targetWidth != i.currentWidth || newLabel != i.currentLabel {
-		// Escape the label properly for shell
-		escapedLabel := strings.ReplaceAll(newLabel, `\`, `\\`)
-		escapedLabel = strings.ReplaceAll(escapedLabel, `"`, `\"`)
-		
 		var animationArgs []string
 		if targetWidth > i.currentWidth {
 			animationArgs = []string{
 				"label.align=right",
-				fmt.Sprintf("label=%s", escapedLabel),
+				fmt.Sprintf("label=%s", newLabel),
 				"label.drawing=on",
 				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
 				"width=" + strconv.Itoa(targetWidth),
@@ -234,33 +230,7 @@ func (i *MediaItem) Update(
 		} else {
 			animationArgs = []string{
 				"label.align=left",
-				fmt.Sprintf("label=%s", escapedLabel),
-				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
-				"width=" + strconv.Itoa(targetWidth),
-			}
-			if targetWidth == 0 {
-				animationArgs = append(animationArgs, "label.drawing=off")
-			}
-		}
-		batches = batch(batches, m(s("--animate", sketchybar.AnimationTanh, "15", "--set", mediaInfoItemName), animationArgs))
-		i.currentWidth = targetWidth
-		i.currentLabel = newLabel
-	}
-
-	if targetWidth != i.currentWidth || newLabel != i.currentLabel {
-		var animationArgs []string
-		if targetWidth > i.currentWidth {
-			animationArgs = []string{
-				"label.align=right",
-				fmt.Sprintf("label=\"%s\"", newLabel),
-				"label.drawing=on",
-				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
-				"width=" + strconv.Itoa(targetWidth),
-			}
-		} else {
-			animationArgs = []string{
-				"label.align=left",
-				fmt.Sprintf("label=\"%s\"", newLabel),
+				fmt.Sprintf("label=%s", newLabel),
 				"label.max_chars=" + strconv.Itoa(len([]rune(newLabel))),
 				"width=" + strconv.Itoa(targetWidth),
 			}
