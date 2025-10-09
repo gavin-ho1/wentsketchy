@@ -17,6 +17,9 @@ today, it supports:
 - cpu (rewrite of the helper from FelixKratz) in go
 - battery (one battery)
 - calendar
+- media
+- wifi
+- bluetooth
 
 ## faq
 
