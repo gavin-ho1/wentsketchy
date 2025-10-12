@@ -203,8 +203,8 @@ func (i *MediaItem) Update(
 	
 		// Truncate if needed
 		labelRunes := []rune(cleanLabel)
-		if len(labelRunes) > 40 {
-			newLabel = string(labelRunes[:37]) + "..."
+		if len(labelRunes) > 20 {
+			newLabel = string(labelRunes[:19]) + "…"
 		} else {
 			newLabel = cleanLabel
 		}
