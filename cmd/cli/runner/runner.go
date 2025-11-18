@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/lucax88x/wentsketchy/internal/clock"
 	"github.com/lucax88x/wentsketchy/internal/wentsketchy"
@@ -20,11 +21,12 @@ func RunCmdE(
 	viper *viper.Viper,
 	console *console.Console,
 	args []string,
+	cfg *config.Cfg,
 	run RunE,
 ) error {
 	clock := clock.NewSystemCock()
 
-	di, err := wentsketchy.NewWentsketchy(ctx, logger, clock)
+	di, err := wentsketchy.NewWentsketchy(ctx, logger, clock, cfg)
 
 	if err != nil {
 		return fmt.Errorf("runner: could not init wentsketchy. %w", err)

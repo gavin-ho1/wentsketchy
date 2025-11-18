@@ -8,7 +8,10 @@ import (
 	// "syscall"
 	"time"
 
+	"fmt"
+
 	"github.com/lmittmann/tint"
+	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/spf13/viper"
 )
@@ -31,14 +34,36 @@ type ProgramExecutor func(ctx context.Context, logger *slog.Logger) error
 type ExecutorBuilder func(
 	viper *viper.Viper,
 	console *console.Console,
+	cfg *config.Cfg,
 ) ProgramExecutor
 
 func Run(buildExecutor ExecutorBuilder) ExecutionResult {
 	start := time.Now()
 
+	cfg, err := config.ReadYaml()
+	if err != nil {
+		// Cannot create logger yet, so just print to stderr
+		fmt.Fprintf(os.Stderr, "main: could not read config for logger: %v\n", err)
+		// Fallback to a default logger
+	}
+
+	var logLevel slog.Level
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
 	logger := slog.New(tint.NewHandler(
 		os.Stderr,
-		&tint.Options{Level: slog.LevelDebug},
+		&tint.Options{Level: logLevel},
 	))
 
 	defer func() {
@@ -59,7 +84,7 @@ func Run(buildExecutor ExecutorBuilder) ExecutionResult {
 	}
 
 	ctx := context.Background()
-	err = buildExecutor(viper, console)(ctx, logger)
+	err = buildExecutor(viper, console, cfg)(ctx, logger)
 
 	if err != nil {
 		logger.Error("main: failed to execute program", slog.Any("err", err))

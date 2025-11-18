@@ -5,13 +5,14 @@ import (
 	"log/slog"
 
 	"github.com/lucax88x/wentsketchy/cmd/cli/commands"
+	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/spf13/viper"
 )
 
-func NewCliExecutor(viper *viper.Viper, console *console.Console) ProgramExecutor {
+func NewCliExecutor(viper *viper.Viper, console *console.Console, cfg *config.Cfg) ProgramExecutor {
 	return func(ctx context.Context, logger *slog.Logger) error {
-		rootCmd := commands.NewRootCmd(ctx, logger, viper, console)
+		rootCmd := commands.NewRootCmd(ctx, logger, viper, console, cfg)
 
 		err := rootCmd.Execute()
 

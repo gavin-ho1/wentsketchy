@@ -4,8 +4,11 @@ left:
   - front_app
 
 right:
-  - bluetooth
+  # - bluetooth
+  # - media
   - volume
   - wifi
   - battery
   - calendar
+
+log_level: error

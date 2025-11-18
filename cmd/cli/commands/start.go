@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/config/settings"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/lucax88x/wentsketchy/cmd/cli/runner"
@@ -22,12 +23,13 @@ func NewStartCmd(
 	logger *slog.Logger,
 	viper *viper.Viper,
 	console *console.Console,
+	cfg *config.Cfg,
 ) *cobra.Command {
 	startCmd := &cobra.Command{
 		Use:   "start",
 		Short: "start wentsketchy",
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runner.RunCmdE(ctx, logger, viper, console, args, runStartCmd())
+			return runner.RunCmdE(ctx, logger, viper, console, args, cfg, runStartCmd())
 		},
 	}
 

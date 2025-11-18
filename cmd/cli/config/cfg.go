@@ -16,6 +16,7 @@ type Cfg struct {
 	Right      []string `yaml:"right"`
 	LeftNotch  []string `yaml:"left_notch"`
 	RightNotch []string `yaml:"right_notch"`
+	LogLevel   string   `yaml:"log_level"`
 }
 
 type ConfigData struct {
@@ -24,6 +25,7 @@ type ConfigData struct {
 	Right      []string `yaml:"right"`
 	LeftNotch  []string `yaml:"left_notch"`
 	RightNotch []string `yaml:"right_notch"`
+	LogLevel   string   `yaml:"log_level"`
 	Icons      struct {
 		Workspace map[string]string `yaml:"workspace"`
 	} `yaml:"icons"`
@@ -63,5 +65,6 @@ func ReadYaml() (*Cfg, error) {
 		Right:      configData.Right,
 		LeftNotch:  configData.LeftNotch,
 		RightNotch: configData.RightNotch,
+		LogLevel:   configData.LogLevel,
 	}, nil
 }

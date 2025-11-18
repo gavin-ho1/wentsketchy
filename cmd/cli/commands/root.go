@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/lucax88x/wentsketchy/cmd/cli/config"
 	"github.com/lucax88x/wentsketchy/cmd/cli/console"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -14,6 +15,7 @@ func NewRootCmd(
 	logger *slog.Logger,
 	viper *viper.Viper,
 	console *console.Console,
+	cfg *config.Cfg,
 ) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:          "cli",
@@ -25,7 +27,7 @@ func NewRootCmd(
 
 	configureRootCmdFlags(viper, rootCmd)
 
-	rootCmd.AddCommand(NewStartCmd(ctx, logger, viper, console))
+	rootCmd.AddCommand(NewStartCmd(ctx, logger, viper, console, cfg))
 
 	return rootCmd
 }

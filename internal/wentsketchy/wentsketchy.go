@@ -32,13 +32,14 @@ func NewWentsketchy(
 	ctx context.Context,
 	logger *slog.Logger,
 	clock clock.Clock,
+	cfg *config.Cfg,
 ) (*Wentsketchy, error) {
 	di := &Wentsketchy{
 		Logger: logger,
 		Clock:  clock,
 	}
 
-	err := initialize(ctx, di)
+	err := initialize(ctx, di, cfg)
 
 	if err != nil {
 		return nil, fmt.Errorf("init: could not initialize wentsketchy. %w", err)
@@ -47,13 +48,7 @@ func NewWentsketchy(
 	return di, nil
 }
 
-func initialize(ctx context.Context, di *Wentsketchy) error {
-	cfg, err := config.ReadYaml()
-
-	if err != nil {
-		//nolint:errorlint // no wrap
-		return fmt.Errorf("wentsketchy: could not initialize cfg from yaml. %v", err)
-	}
+func initialize(ctx context.Context, di *Wentsketchy, cfg *config.Cfg) error {
 
 	di.command = command.NewCommand(di.Logger)
 	di.aerospaceAPI = aerospace.NewAPI(di.Logger, di.command)
