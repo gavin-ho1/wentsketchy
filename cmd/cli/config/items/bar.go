@@ -34,6 +34,9 @@ func Bar(logger *slog.Logger, batches Batches) (Batches, error) {
 		Color: sketchybar.ColorOptions{
 			Color: settings.Sketchybar.BarBackgroundColor,
 		},
+		Border: sketchybar.BorderOptions{
+			Width: settings.Sketchybar.BarBorderWidth,
+		},
 	}
 
 	batches = batch(batches, m(s("--bar"), bar.ToArgs()))

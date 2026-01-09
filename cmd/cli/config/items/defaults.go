@@ -45,7 +45,7 @@ func Defaults(batches [][]string) ([][]string, error) {
 			},
 			Border: sketchybar.BorderOptions{
 				Color: settings.Sketchybar.ItemBorderColor,
-				Width: pointer(3),
+				Width: settings.Sketchybar.ItemBorderWidth,
 			},
 			Padding: sketchybar.PaddingOptions{
 				Right: pointer(0),

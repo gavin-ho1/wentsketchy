@@ -24,6 +24,7 @@ type Settings struct {
 	ItemRadius          *int
 	ItemBackgroundColor string
 	ItemBorderColor     string
+	ItemBorderWidth     *int
 	IconPadding         *int
 	LabelColor          string
 	LabelFont           string
@@ -34,6 +35,7 @@ type Settings struct {
 	IconFontKind        string
 	IconFontSize        string
 	IconStripFont       string
+	BarBorderWidth      *int
 	Aerospace           AerospaceSettings
 }
 
@@ -49,6 +51,7 @@ var Sketchybar = Settings{
 	IconPadding:         pointer(12),
 	ItemBackgroundColor: colors.Transparent,
 	ItemBorderColor:     colors.WhiteA05,
+	ItemBorderWidth:     pointer(2),
 	LabelColor:          colors.White,
 	LabelFont:           FontLabel,
 	LabelFontKind:       "Medium",
@@ -58,6 +61,7 @@ var Sketchybar = Settings{
 	IconFontKind:        "Bold",
 	IconFontSize:        "18.0",
 	IconStripFont:       FontAppIcon,
+	BarBorderWidth:      pointer(0),
 	Aerospace: AerospaceSettings{
 		Padding:                         pointer(8),
 		WorkspaceBackgroundColor:        colors.Transparent,
